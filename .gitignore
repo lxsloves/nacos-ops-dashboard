@@ -11,4 +11,4 @@
 .DS_Store
 *.swp
 
-# nginx 二进制(bin/install-nginx.sh 拉取后得到,跨平台分发需要 commit)
+# nginx 二进制(三个平台的 nginx 在 bin/,跨平台分发需要 commit 进 git,不在 gitignore 里)
