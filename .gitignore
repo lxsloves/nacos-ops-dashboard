@@ -1,0 +1,14 @@
+# nginx 渲染产物
+.nginx.rendered.conf
+.nginx.pid
+.nginx.log
+
+# reload-server 运行产物
+.reload-server.log
+.reload-server.pid
+
+# 系统垃圾
+.DS_Store
+*.swp
+
+# nginx 二进制(bin/install-nginx.sh 拉取后得到,跨平台分发需要 commit)

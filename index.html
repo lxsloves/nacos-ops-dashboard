@@ -1,0 +1,1350 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nacos</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --line: #d7dde8;
+      --line-soft: #edf1f7;
+      --text: #172033;
+      --muted: #667085;
+      --good: #027a48;
+      --good-bg: #ecfdf3;
+      --bad: #b42318;
+      --bad-bg: #fff1f3;
+      --warn: #b54708;
+      --warn-bg: #fffbeb;
+      --info: #2d31a6;
+      --info-bg: #eef4ff;
+      --primary: #2454ff;
+      --shadow: 0 8px 22px rgba(23, 32, 51, 0.06);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    button,
+    input,
+    select {
+      font: inherit;
+    }
+
+    .dashboard-shell {
+      min-height: 100vh;
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+      grid-template-rows: minmax(0, 1fr);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title-group {
+      display: grid;
+      gap: 2px;
+    }
+
+    .title-group h1 {
+      margin: 0;
+      font-size: 20px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .usage-note {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toolbar,
+    .filter-panel,
+    .table-panel,
+    .diagnostics {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .table-panel {
+      position: relative;
+    }
+
+    .workspace-layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(440px, 520px) minmax(0, 1fr);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .side-panel {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto auto auto minmax(220px, 1fr);
+      gap: 10px;
+    }
+
+    .list-panel {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+    }
+
+    .side-panel .toolbar {
+      grid-template-columns: 1fr;
+    }
+
+    .side-panel .filter-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .side-panel .span-1,
+    .side-panel .span-2,
+    .side-panel .span-3,
+    .side-panel .span-4,
+    .side-panel .span-5,
+    .side-panel .span-6 {
+      grid-column: span 1;
+    }
+
+    .side-panel .summary-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .side-panel .filter-grid .check-field {
+      grid-column: 1 / -1;
+    }
+
+    .side-panel .diagnostics {
+      min-height: 220px;
+      overflow: auto;
+    }
+
+    .side-panel .metric {
+      min-height: 68px;
+      padding: 10px;
+    }
+
+    .side-panel .metric strong {
+      font-size: 24px;
+    }
+
+    .toolbar,
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(12, minmax(0, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+
+    .field {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .field label,
+    .check-field {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+    }
+
+    input,
+    select,
+    button {
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 0 10px;
+      background: #fff;
+      color: var(--text);
+      outline: none;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(36, 84, 255, 0.12);
+    }
+
+    button {
+      cursor: pointer;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+    }
+
+    button.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    button.danger {
+      background: var(--bad-bg);
+      color: var(--bad);
+      border-color: #fecdd6;
+    }
+
+    button.success {
+      background: var(--good-bg);
+      color: var(--good);
+      border-color: #abefc6;
+    }
+
+    button.plain {
+      background: #fff;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 82px;
+      box-shadow: var(--shadow);
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 28px;
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .metric.good strong {
+      color: var(--good);
+    }
+
+    .metric.bad strong {
+      color: var(--bad);
+    }
+
+    .metric.warn strong {
+      color: var(--warn);
+    }
+
+    .metric.info strong {
+      color: var(--info);
+    }
+
+    .filter-header,
+    .table-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .check-field {
+      height: 34px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .check-field input {
+      width: 16px;
+      height: 16px;
+      padding: 0;
+    }
+
+    .batch-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .batch-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .table-wrap {
+      overflow: auto;
+      max-height: calc(100vh - 154px);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      min-width: 1080px;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border-bottom: 1px solid var(--line-soft);
+      text-align: left;
+      white-space: nowrap;
+      vertical-align: middle;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      background: #f7f9fc;
+      z-index: 1;
+      color: #344054;
+      font-size: 12px;
+    }
+
+    tbody tr:hover {
+      background: #f8fbff;
+    }
+
+    tr.is-risk {
+      background: #fff7f7;
+    }
+
+    tr.is-offline {
+      background: var(--warn-bg);
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-width: 44px;
+      justify-content: center;
+      height: 22px;
+      border-radius: 999px;
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .status.good {
+      color: var(--good);
+      background: var(--good-bg);
+    }
+
+    .status.bad {
+      color: var(--bad);
+      background: var(--bad-bg);
+    }
+
+    .status.warn {
+      color: var(--warn);
+      background: var(--warn-bg);
+    }
+
+    .metadata {
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: var(--muted);
+    }
+
+    .row-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .empty {
+      padding: 28px;
+      text-align: center;
+      color: var(--muted);
+    }
+
+    .diagnostics {
+      min-height: 46px;
+    }
+
+    .diagnostics-list {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    .diagnostics-list li + li {
+      margin-top: 4px;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(255, 255, 255, 0.72);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      border-radius: 8px;
+      z-index: 10;
+      color: var(--text);
+      font-weight: 600;
+      font-size: 13px;
+      backdrop-filter: blur(1px);
+    }
+
+    .loading-overlay::before {
+      content: "";
+      width: 22px;
+      height: 22px;
+      border: 3px solid var(--primary);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(23, 32, 51, 0.55);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      backdrop-filter: blur(2px);
+    }
+
+    .modal-overlay[hidden] {
+      display: none;
+    }
+
+    .modal-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 20px;
+      width: 440px;
+      max-width: calc(100vw - 32px);
+      box-shadow: 0 20px 60px rgba(23, 32, 51, 0.3);
+    }
+
+    .modal-title {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+
+    .modal-desc {
+      margin: 0 0 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .modal-desc code {
+      background: var(--bg);
+      padding: 1px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+
+    #nacosUrlInput {
+      width: 100%;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .modal-error {
+      margin-top: 8px;
+      padding: 8px 10px;
+      background: var(--bad-bg);
+      color: var(--bad);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+
+    .modal-error[hidden] {
+      display: none;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .span-1 { grid-column: span 1; }
+    .span-2 { grid-column: span 2; }
+    .span-3 { grid-column: span 3; }
+    .span-4 { grid-column: span 4; }
+    .span-5 { grid-column: span 5; }
+    .span-6 { grid-column: span 6; }
+
+    @media (max-width: 980px) {
+      .dashboard-shell {
+        padding: 10px;
+      }
+
+      .header,
+      .batch-bar,
+      .filter-header,
+      .table-header {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .toolbar,
+      .filter-grid,
+      .workspace-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .workspace-layout {
+        min-height: auto;
+      }
+
+      .side-panel {
+        grid-template-rows: none;
+      }
+
+      .span-1,
+      .span-2,
+      .span-3,
+      .span-4,
+      .span-5,
+      .span-6 {
+        grid-column: span 1;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .table-wrap {
+        max-height: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="modal-overlay" id="urlModal" hidden>
+    <div class="modal-card">
+      <h2 class="modal-title">设置 Nacos 地址</h2>
+      <p class="modal-desc">
+        输入你的 Nacos 服务器地址,格式:<code>http://host:port/nacos/</code>(或 https://)。<br>
+        默认值 <code>http://127.0.0.1:8848/nacos/</code> 表示本机 Nacos。
+      </p>
+      <input type="text" id="nacosUrlInput" placeholder="http://127.0.0.1:8848/nacos/" autocomplete="off">
+      <div class="modal-error" id="urlModalError" hidden></div>
+      <div class="modal-actions">
+        <button class="plain" id="urlModalDefault" type="button">使用默认值</button>
+        <button class="primary" id="urlModalSubmit" type="button">应用</button>
+      </div>
+    </div>
+  </div>
+
+  <main id="app" class="dashboard-shell">
+    <div class="workspace-layout">
+      <aside class="side-panel" aria-label="连接、状态和筛选">
+        <section class="toolbar" aria-label="Nacos 连接信息"></section>
+        <section class="summary-grid" aria-label="实例状态概览"></section>
+        <section class="filter-panel" aria-label="实例筛选"></section>
+        <section class="diagnostics" aria-label="诊断信息"></section>
+      </aside>
+      <section class="list-panel" aria-label="实例列表区域">
+        <section class="table-panel" aria-label="实例列表"></section>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const NACOS_PROXY_BASE_URL = "/nacos";
+
+    const state = {
+      // 每次新进入都从默认值开始,不清空 localStorage 里的"上次选择"
+      // (避免刷新后还停留在上次的 namespace)
+      namespaceId: "",
+      username: "",
+      password: "",
+      accessToken: sessionStorage.getItem("nacosDashboard.accessToken") || "",
+      connected: false,
+      loading: false,
+      namespaceOptions: [
+        { id: "public", name: "public" },
+        { id: "dev", name: "dev" },
+        { id: "test", name: "test" }
+      ],
+      instances: [],
+      selectedKeys: new Set(),
+      filters: {
+        serviceName: "",
+        ip: "",
+        groupName: "",
+        healthy: "all",
+        enabled: "all",
+        riskOnly: false
+      },
+      diagnostics: []
+    };
+
+    const selectors = {
+      toolbar: document.querySelector(".toolbar"),
+      summary: document.querySelector(".summary-grid"),
+      filter: document.querySelector(".filter-panel"),
+      table: document.querySelector(".table-panel"),
+      diagnostics: document.querySelector(".diagnostics")
+    };
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function pushDiagnostic(message) {
+      state.diagnostics.unshift(`${new Date().toLocaleTimeString()} ${message}`);
+      state.diagnostics = state.diagnostics.slice(0, 8);
+    }
+
+    function normalizeBaseUrl(url) {
+      return url.trim().replace(/\/+$/, "");
+    }
+
+    function buildUrl(path, params = {}) {
+      const baseUrl = normalizeBaseUrl(NACOS_PROXY_BASE_URL);
+      const url = new URL(`${baseUrl}${path}`, window.location.origin);
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== "") {
+          url.searchParams.set(key, value);
+        }
+      });
+      if (state.accessToken) {
+        url.searchParams.set("accessToken", state.accessToken);
+      }
+      return url;
+    }
+
+    async function requestJson(path, params = {}, options = {}, _retried = false) {
+      const response = await fetch(buildUrl(path, params), options);
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (error) {
+        if (response.ok) {
+          return text;
+        }
+        throw new Error(`接口请求失败：${path}，HTTP ${response.status}，响应摘要：${text.slice(0, 160)}`);
+      }
+      if (!response.ok || data.code >= 400) {
+        const message = data.message || data.error || `接口请求失败：${path}，HTTP ${response.status}`;
+        // Nacos token 过期(Nacos 默认 5 小时 TTL):清掉本地缓存 → 强制重登 → 重发一次
+        if (!_retried && /token expired/i.test(message) && state.username && state.password) {
+          state.accessToken = "";
+          sessionStorage.removeItem("nacosDashboard.accessToken");
+          await loginIfNeeded(true);
+          return requestJson(path, params, options, true);
+        }
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    function explainError(error) {
+      const message = error && error.message ? error.message : String(error);
+      if (message.includes("Failed to fetch") || message.includes("NetworkError") || message.includes("Load failed")) {
+        return "请求被浏览器或网络拦截。请检查 nginx /nacos 代理是否可访问";
+      }
+      if (message.includes("403") || message.includes("401") || message.includes("unknown user") || message.includes("authorization")) {
+        return "鉴权失败。请检查用户名、密码、accessToken、Nacos 认证开关和当前账号权限";
+      }
+      return message;
+    }
+
+    function splitServiceName(rawServiceName) {
+      const text = String(rawServiceName || "");
+      const separatorIndex = text.indexOf("@@");
+      if (separatorIndex < 0) {
+        return { groupName: "DEFAULT_GROUP", serviceName: text };
+      }
+      return {
+        groupName: text.slice(0, separatorIndex) || "DEFAULT_GROUP",
+        serviceName: text.slice(separatorIndex + 2)
+      };
+    }
+
+    function getCatalogInstances(data) {
+      const candidate = data.list || data.pageItems || data.data?.list || data.data?.pageItems || data.data;
+      return Array.isArray(candidate) ? candidate : [];
+    }
+
+    function getCatalogCount(data, currentPageSize) {
+      return Number(data.count || data.totalCount || data.data?.count || data.data?.totalCount || currentPageSize);
+    }
+
+    function getCatalogServices(data) {
+      const candidate = data.serviceList || data.list || data.pageItems || data.data?.serviceList || data.data?.list || data.data?.pageItems || data.data;
+      return Array.isArray(candidate) ? candidate : [];
+    }
+
+    function normalizeServiceIdentity(service) {
+      if (typeof service === "string") {
+        return service;
+      }
+      const serviceName = service.name || service.serviceName || service.dom || "";
+      const groupName = service.groupName || service.group || "DEFAULT_GROUP";
+      return serviceName.includes("@@") ? serviceName : `${groupName}@@${serviceName}`;
+    }
+
+    function normalizeInstance(serviceName, host, groupName = "DEFAULT_GROUP") {
+      const clusterName = host.clusterName || host.cluster || "DEFAULT";
+      const port = Number(host.port);
+      const ip = host.ip || host.address || "";
+      return {
+        key: `${groupName}|${serviceName}|${ip}|${port}|${clusterName}`,
+        groupName,
+        serviceName,
+        ip,
+        port,
+        clusterName,
+        healthy: host.healthy !== false,
+        enabled: host.enabled !== false,
+        weight: Number(host.weight ?? 1),
+        ephemeral: host.ephemeral !== false,
+        metadata: host.metadata || {}
+      };
+    }
+
+    function instanceRiskRank(instance) {
+      if (!instance.healthy) return 0;
+      if (!instance.enabled) return 1;
+      if (instance.clusterName && instance.clusterName !== "DEFAULT") return 2;
+      return 3;
+    }
+
+    function getFilteredInstances() {
+      const ipKeyword = state.filters.ip.trim();
+      return state.instances
+        .filter((item) => {
+          if (state.filters.serviceName && item.serviceName !== state.filters.serviceName) return false;
+          if (ipKeyword && !String(item.ip).includes(ipKeyword)) return false;
+          if (state.filters.groupName && item.groupName !== state.filters.groupName) return false;
+          if (state.filters.healthy !== "all" && String(item.healthy) !== state.filters.healthy) return false;
+          if (state.filters.enabled !== "all" && String(item.enabled) !== state.filters.enabled) return false;
+          if (state.filters.riskOnly && item.healthy && item.enabled) return false;
+          return true;
+        })
+        .sort((a, b) => {
+          const rank = instanceRiskRank(a) - instanceRiskRank(b);
+          if (rank !== 0) return rank;
+          return `${a.serviceName}:${a.ip}:${a.port}`.localeCompare(`${b.serviceName}:${b.ip}:${b.port}`);
+        });
+    }
+
+    function getStats() {
+      const clusters = new Set(state.instances.map((item) => item.clusterName).filter(Boolean));
+      const groups = new Set(state.instances.map((item) => item.groupName).filter(Boolean));
+      const services = new Set(state.instances.map((item) => item.serviceName));
+      return {
+        healthy: state.instances.filter((item) => item.healthy).length,
+        unhealthy: state.instances.filter((item) => !item.healthy).length,
+        disabled: state.instances.filter((item) => !item.enabled).length,
+        gray: state.instances.filter((item) => item.clusterName && item.clusterName !== "DEFAULT").length,
+        services: services.size,
+        clusters: Array.from(clusters).sort(),
+        groups: Array.from(groups).sort()
+      };
+    }
+
+    function getNamespaceOptions() {
+      const options = [...state.namespaceOptions];
+      if (state.namespaceId && !options.some((item) => item.id === state.namespaceId)) {
+        options.unshift({ id: state.namespaceId, name: state.namespaceId });
+      }
+      return options;
+    }
+
+    function getServiceOptions() {
+      return Array.from(new Set(state.instances.map((item) => item.serviceName))).sort();
+    }
+
+    function getFilterSummaryText() {
+      return `${state.connected ? "已连接 Nacos" : "等待连接 Nacos"} · 当前显示 ${getFilteredInstances().length} / ${state.instances.length}`;
+    }
+
+    function updateFilterSummaryText() {
+      const summary = selectors.filter.querySelector("[data-filter-summary]");
+      if (summary) {
+        summary.textContent = getFilterSummaryText();
+      }
+    }
+
+    function renderToolbar() {
+      selectors.toolbar.innerHTML = `
+        <div class="field span-2">
+          <label for="username">用户名</label>
+          <input id="username" data-state="username" value="${escapeHtml(state.username)}" autocomplete="username">
+        </div>
+        <div class="field span-2">
+          <label for="password">密码 / token</label>
+          <input id="password" data-state="password" value="${escapeHtml(state.password)}" type="password" autocomplete="current-password">
+        </div>
+        <button class="primary span-1" data-action="connect" ${state.loading ? "disabled" : ""}>连接</button>
+      `;
+    }
+
+    function renderSummary() {
+      const stats = getStats();
+      selectors.summary.innerHTML = `
+        <article class="metric good"><span>健康实例</span><strong>${stats.healthy}</strong></article>
+        <article class="metric bad"><span>异常实例</span><strong>${stats.unhealthy}</strong></article>
+        <article class="metric warn"><span>下线实例</span><strong>${stats.disabled}</strong></article>
+        <article class="metric info"><span>灰度/非默认集群</span><strong>${stats.gray}</strong></article>
+        <article class="metric"><span>服务数</span><strong>${stats.services}</strong></article>
+      `;
+    }
+
+    function renderFilters() {
+      const stats = getStats();
+      const namespaceOptions = getNamespaceOptions()
+        .map((item) => `<option value="${escapeHtml(item.id)}" ${state.namespaceId === item.id ? "selected" : ""}>${escapeHtml(item.name || item.id)}</option>`)
+        .join("");
+      const serviceOptions = getServiceOptions()
+        .map((serviceName) => `<option value="${escapeHtml(serviceName)}" ${state.filters.serviceName === serviceName ? "selected" : ""}>${escapeHtml(serviceName)}</option>`)
+        .join("");
+      const groupOptions = stats.groups
+        .map((groupName) => `<option value="${escapeHtml(groupName)}" ${state.filters.groupName === groupName ? "selected" : ""}>${escapeHtml(groupName)}</option>`)
+        .join("");
+      selectors.filter.innerHTML = `
+        <div class="filter-header">
+          <h2 class="section-title">实例筛选</h2>
+          <span class="usage-note" data-filter-summary>${getFilterSummaryText()}</span>
+        </div>
+        <div class="filter-grid">
+          <div class="field namespace-filter span-2">
+            <label for="namespaceId">Namespace ID</label>
+            <select id="namespaceId" data-state="namespaceId">
+              ${namespaceOptions}
+            </select>
+          </div>
+          <div class="field span-3">
+            <label for="serviceName">服务</label>
+            <select id="serviceName" data-filter="serviceName">
+              <option value="">全部服务</option>
+              ${serviceOptions}
+            </select>
+          </div>
+          <div class="field span-2">
+            <label for="ip">IP</label>
+            <input id="ip" data-filter="ip" value="${escapeHtml(state.filters.ip)}" placeholder="按 IP 筛选">
+          </div>
+          <div class="field span-2">
+            <label for="groupName">分组</label>
+            <select id="groupName" data-filter="groupName">
+              <option value="">全部分组</option>
+              ${groupOptions}
+            </select>
+          </div>
+          <div class="field span-2">
+            <label for="healthy">健康状态</label>
+            <select id="healthy" data-filter="healthy">
+              <option value="all" ${state.filters.healthy === "all" ? "selected" : ""}>全部</option>
+              <option value="true" ${state.filters.healthy === "true" ? "selected" : ""}>健康</option>
+              <option value="false" ${state.filters.healthy === "false" ? "selected" : ""}>异常</option>
+            </select>
+          </div>
+          <div class="field span-2">
+            <label for="enabled">上线状态</label>
+            <select id="enabled" data-filter="enabled">
+              <option value="all" ${state.filters.enabled === "all" ? "selected" : ""}>全部</option>
+              <option value="true" ${state.filters.enabled === "true" ? "selected" : ""}>上线</option>
+              <option value="false" ${state.filters.enabled === "false" ? "selected" : ""}>下线</option>
+            </select>
+          </div>
+          <label class="check-field span-2">
+            <input type="checkbox" data-filter="riskOnly" ${state.filters.riskOnly ? "checked" : ""}>
+            仅看异常/下线
+          </label>
+        </div>
+      `;
+    }
+
+    function renderTable() {
+      const rows = getFilteredInstances();
+      const selectedCount = state.selectedKeys.size;
+      const tableRows = rows.map((item) => {
+        const metadata = JSON.stringify(item.metadata || {});
+        const rowClass = !item.healthy ? "is-risk" : (!item.enabled ? "is-offline" : "");
+        return `
+          <tr class="${rowClass}">
+            <td><input type="checkbox" data-select-instance data-key="${escapeHtml(item.key)}" ${state.selectedKeys.has(item.key) ? "checked" : ""}></td>
+            <td>${escapeHtml(item.serviceName)}</td>
+            <td>${escapeHtml(item.groupName || "DEFAULT_GROUP")}</td>
+            <td>${escapeHtml(item.ip)}:${escapeHtml(item.port)}</td>
+            <td>${escapeHtml(item.clusterName || "DEFAULT")}</td>
+            <td><span class="status ${item.healthy ? "good" : "bad"}">${item.healthy ? "健康" : "异常"}</span></td>
+            <td><span class="status ${item.enabled ? "good" : "warn"}">${item.enabled ? "上线" : "下线"}</span></td>
+            <td>${escapeHtml(item.weight)}</td>
+            <td class="metadata" title="${escapeHtml(metadata)}">${escapeHtml(metadata)}</td>
+            <td>
+              <div class="row-actions">
+                ${item.enabled
+                  ? `<button class="danger" data-action="single-disable" data-key="${escapeHtml(item.key)}" ${state.loading ? "disabled" : ""}>下线</button>`
+                  : `<button class="success" data-action="single-enable" data-key="${escapeHtml(item.key)}" ${state.loading ? "disabled" : ""}>上线</button>`}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join("");
+      selectors.table.innerHTML = `
+        ${state.loading ? `<div class="loading-overlay">正在处理,请稍候…</div>` : ""}
+        <div class="table-header">
+          <h2 class="section-title">实例列表</h2>
+          <span class="usage-note">默认按异常、下线、非默认集群优先排序</span>
+        </div>
+        <div class="batch-bar">
+          <span>已选 ${selectedCount} 个实例 · 当前显示 ${rows.length} / ${state.instances.length}</span>
+          <div class="batch-actions">
+            <button class="success" data-action="batch-enable" ${selectedCount === 0 || state.loading ? "disabled" : ""}>批量上线</button>
+            <button class="danger" data-action="batch-disable" ${selectedCount === 0 || state.loading ? "disabled" : ""}>批量下线</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:42px"><input type="checkbox" data-action="toggle-all" ${rows.length > 0 && rows.every((item) => state.selectedKeys.has(item.key)) ? "checked" : ""}></th>
+                <th>服务名</th>
+                <th>分组</th>
+                <th>IP:端口</th>
+                <th>集群</th>
+                <th>健康</th>
+                <th>上线</th>
+                <th>权重</th>
+                <th>Metadata</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows || `<tr><td colspan="10"><div class="empty">暂无实例。请确认 nginx /nacos 代理可用并连接后拉取实时实例</div></td></tr>`}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderDiagnostics() {
+      const messages = state.diagnostics.length
+        ? state.diagnostics
+        : ["请确认 nginx /nacos 代理可用并连接"];
+      selectors.diagnostics.innerHTML = `
+        <h2 class="section-title">诊断信息</h2>
+        <ul class="diagnostics-list">
+          ${messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("")}
+        </ul>
+      `;
+    }
+
+    function render() {
+      renderToolbar();
+      renderSummary();
+      renderFilters();
+      renderTable();
+      renderDiagnostics();
+    }
+
+    async function loginIfNeeded(force = false) {
+      if (state.accessToken && !force) return;
+      if (!state.username && state.password) {
+        state.accessToken = state.password;
+        sessionStorage.setItem("nacosDashboard.accessToken", state.accessToken);
+        return;
+      }
+      if (!state.username || !state.password) return;
+      const body = new URLSearchParams({ username: state.username, password: state.password });
+      const data = await requestJson("/v1/auth/users/login", {}, { method: "POST", body });
+      state.accessToken = data.accessToken || data.data?.accessToken || "";
+      if (state.accessToken) {
+        sessionStorage.setItem("nacosDashboard.accessToken", state.accessToken);
+      }
+    }
+
+    async function loadServices() {
+      const services = [];
+      let pageNo = 1;
+      let count = 0;
+      do {
+        const data = await requestJson("/v1/ns/catalog/services", {
+          hasIpCount: true,
+          withInstances: false,
+          pageNo,
+          pageSize: 500,
+          serviceNameParam: "",
+          groupNameParam: "",
+          namespaceId: state.namespaceId
+        });
+        const pageServices = getCatalogServices(data);
+        count = getCatalogCount(data, pageServices.length);
+        services.push(...pageServices.map(normalizeServiceIdentity).filter(Boolean));
+        pageNo += 1;
+      } while (services.length < count && pageNo < 50);
+      return services;
+    }
+
+    async function loadInstancesForService(rawServiceName) {
+      const { groupName, serviceName } = splitServiceName(rawServiceName);
+      const instances = [];
+      let pageNo = 1;
+      let count = 0;
+      do {
+        const data = await requestJson("/v1/ns/catalog/instances", {
+          serviceName,
+          clusterName: "DEFAULT",
+          groupName,
+          pageSize: 500,
+          pageNo,
+          namespaceId: state.namespaceId
+        });
+        const pageInstances = getCatalogInstances(data);
+        count = getCatalogCount(data, pageInstances.length);
+        instances.push(...pageInstances.map((host) => normalizeInstance(serviceName, host, groupName)));
+        pageNo += 1;
+      } while (instances.length < count && pageNo < 50);
+      return instances;
+    }
+
+    async function connectAndLoad() {
+      state.loading = true;
+      render();
+      try {
+        // 重置所有筛选条件(新进入/刷新后从干净状态开始)
+        state.filters.serviceName = "";
+        state.filters.ip = "";
+        state.filters.groupName = "";
+        state.filters.healthy = "all";
+        state.filters.enabled = "all";
+        state.filters.riskOnly = false;
+
+        await loginIfNeeded();
+        try {
+          const data = await requestJson("/v1/console/namespaces");
+          const namespaces = Array.isArray(data.data) ? data.data : [];
+          if (namespaces.length > 0) {
+            state.namespaceOptions = namespaces.map((item) => ({
+              id: item.namespace || item.namespaceId || "public",
+              name: item.namespaceShowName || item.namespaceDesc || item.namespace || item.namespaceId || "public"
+            }));
+            // 如果当前没选 namespace(或选的不在列表里),默认选第一个
+            if (!state.namespaceId || !state.namespaceOptions.some((o) => o.id === state.namespaceId)) {
+              state.namespaceId = state.namespaceOptions[0].id;
+            }
+          }
+        } catch (error) {
+          pushDiagnostic(`命名空间列表加载失败，继续使用当前 Namespace：${explainError(error)}`);
+        }
+        const services = await loadServices();
+        const batches = [];
+        for (const serviceName of services) {
+          batches.push(loadInstancesForService(serviceName));
+        }
+        const results = await Promise.all(batches);
+        state.instances = results.flat();
+        state.selectedKeys.clear();
+        state.connected = true;
+        pushDiagnostic(`连接成功，已加载 ${services.length} 个服务、${state.instances.length} 个实例`);
+      } catch (error) {
+        pushDiagnostic(explainError(error));
+      } finally {
+        state.loading = false;
+        render();
+      }
+    }
+
+    async function updateInstanceEnabled(instance, enabled) {
+      const params = {
+        namespaceId: state.namespaceId,
+        groupName: instance.groupName || "DEFAULT_GROUP",
+        serviceName: instance.serviceName,
+        ip: instance.ip,
+        port: instance.port,
+        clusterName: instance.clusterName,
+        weight: instance.weight,
+        enabled,
+        ephemeral: instance.ephemeral,
+        metadata: JSON.stringify(instance.metadata || {})
+      };
+      return requestJson("/v1/ns/instance", params, { method: "PUT" });
+    }
+
+    async function runBatch(enabled, explicitKeys) {
+      const keySet = explicitKeys ? new Set(explicitKeys) : state.selectedKeys;
+      const selected = state.instances.filter((item) => keySet.has(item.key));
+      if (selected.length === 0) return;
+      state.loading = true;
+      render();
+      const results = [];
+      for (const instance of selected) {
+        try {
+          await updateInstanceEnabled(instance, enabled);
+          results.push({ ok: true, instance });
+        } catch (error) {
+          results.push({ ok: false, instance, error: explainError(error) });
+        }
+      }
+      state.selectedKeys.clear();
+      pushDiagnostic(`批量${enabled ? "上线" : "下线"}完成：成功 ${results.filter((item) => item.ok).length}，失败 ${results.filter((item) => !item.ok).length}`);
+      results
+        .filter((item) => !item.ok)
+        .forEach((item) => pushDiagnostic(`${item.instance.serviceName} ${item.instance.ip}:${item.instance.port} 失败：${item.error}`));
+      // Nacos catalog 在 PUT 后偶发不立即刷新,延迟 1s 再拉一次列表。
+      // 同步等,期间列表顶部 loading bar 一直显示,等 connectAndLoad 完成(它 finally 会 render 关 loading)
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await connectAndLoad();
+    }
+
+    function updateStateFromInput(target) {
+      if (target.dataset.state) {
+        state[target.dataset.state] = target.value;
+      }
+      if (target.dataset.filter) {
+        state.filters[target.dataset.filter] = target.type === "checkbox" ? target.checked : target.value;
+      }
+    }
+
+    function applyFilterChange(target) {
+      updateStateFromInput(target);
+      state.selectedKeys.clear();
+      render();
+    }
+
+    document.addEventListener("input", (event) => {
+      const target = event.target;
+      if (target.matches("[data-state], [data-filter]")) {
+        updateStateFromInput(target);
+        if (target.dataset.filter) {
+          state.selectedKeys.clear();
+          renderSummary();
+          renderTable();
+          updateFilterSummaryText();
+        }
+      }
+    });
+
+    document.addEventListener("change", async (event) => {
+      const target = event.target;
+      if (target.matches("[data-select-instance]")) {
+        target.checked ? state.selectedKeys.add(target.dataset.key) : state.selectedKeys.delete(target.dataset.key);
+        render();
+      }
+      if (target.matches("[data-state]")) {
+        updateStateFromInput(target);
+        if (target.dataset.state === "namespaceId" && state.connected) {
+          await connectAndLoad();
+        }
+      }
+      if (target.matches("[data-filter]")) {
+        applyFilterChange(target);
+      }
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      if (event.isComposing || event.keyCode === 229) return; // 中文输入法选词中,不当作回车提交
+      const target = event.target;
+      if (target.matches('[data-state="username"], [data-state="password"]')) {
+        event.preventDefault();
+        const connectButton = document.querySelector('[data-action="connect"]');
+        if (connectButton && !connectButton.disabled) {
+          connectButton.click();
+        }
+      }
+    });
+
+    document.addEventListener("click", async (event) => {
+      const target = event.target.closest("[data-action]");
+      if (!target) return;
+      const action = target.dataset.action;
+      if (action === "connect") {
+        await connectAndLoad();
+      }
+      if (action === "batch-enable") {
+        await runBatch(true);
+      }
+      if (action === "batch-disable") {
+        await runBatch(false);
+      }
+      if (action === "single-enable") {
+        await runBatch(true, [target.dataset.key]);
+      }
+      if (action === "single-disable") {
+        await runBatch(false, [target.dataset.key]);
+      }
+      if (action === "toggle-all") {
+        const rows = getFilteredInstances();
+        const allSelected = rows.length > 0 && rows.every((item) => state.selectedKeys.has(item.key));
+        rows.forEach((item) => {
+          if (allSelected) {
+            state.selectedKeys.delete(item.key);
+          } else {
+            state.selectedKeys.add(item.key);
+          }
+        });
+        render();
+      }
+    });
+
+    render();
+
+    // ---------- 启动弹窗:设置 Nacos 地址 ----------
+    const MODAL = {
+      overlay: document.getElementById("urlModal"),
+      input: document.getElementById("nacosUrlInput"),
+      error: document.getElementById("urlModalError"),
+      submit: document.getElementById("urlModalSubmit"),
+      defaultBtn: document.getElementById("urlModalDefault")
+    };
+
+    function showModalError(message) {
+      MODAL.error.textContent = message;
+      MODAL.error.hidden = false;
+    }
+
+    function hideModalError() {
+      MODAL.error.hidden = true;
+      MODAL.error.textContent = "";
+    }
+
+    async function submitNacosUrl(url) {
+      MODAL.submit.disabled = true;
+      MODAL.defaultBtn.disabled = true;
+      hideModalError();
+      try {
+        const response = await fetch("/__admin__/api/nacos-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.ok) {
+          showModalError(data.error || `提交失败 (HTTP ${response.status})`);
+          MODAL.submit.disabled = false;
+          MODAL.defaultBtn.disabled = false;
+          return false;
+        }
+        localStorage.setItem("nacosDashboard.nacosUrl", url);
+        MODAL.overlay.hidden = true;
+        return true;
+      } catch (error) {
+        showModalError("网络错误:" + (error.message || error));
+        MODAL.submit.disabled = false;
+        MODAL.defaultBtn.disabled = false;
+        return false;
+      }
+    }
+
+    // 从用户输入里提取 Nacos API 基础地址(支持完整浏览器地址栏 URL)
+    // 例:"http://172.18.66.210:8848/nacos/#/serviceManagement?..." → "http://172.18.66.210:8848/nacos/"
+    function extractNacosBaseUrl(input) {
+      const text = (input || "").trim();
+      if (!text) return null;
+      // 提取 protocol://host[:port]
+      const match = text.match(/^(https?:\/\/[^\/\s?#]+)(\/[^?#]*)?([?#].*)?$/);
+      if (!match) return null;
+      const base = match[1]; // protocol://host:port
+      const path = (match[2] || "").toLowerCase();
+      if (!path.startsWith("/nacos")) return null;
+      return `${base}/nacos/`;
+    }
+
+    MODAL.submit.addEventListener("click", () => {
+      const raw = MODAL.input.value.trim();
+      if (!raw) {
+        showModalError("地址不能为空");
+        return;
+      }
+      const url = extractNacosBaseUrl(raw);
+      if (!url) {
+        showModalError("无法识别 Nacos 地址,需要以 http(s)://host:port/nacos/ 开头");
+        return;
+      }
+      submitNacosUrl(url);
+    });
+
+    MODAL.defaultBtn.addEventListener("click", () => {
+      MODAL.input.value = "http://127.0.0.1:8848/nacos/";
+      submitNacosUrl("http://127.0.0.1:8848/nacos/");
+    });
+
+    MODAL.input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" || event.isComposing || event.keyCode === 229) return;
+      event.preventDefault();
+      MODAL.submit.click();
+    });
+
+    // 每次刷新都弹 modal,默认带出 localStorage 里上次的地址
+    function showNacosModal() {
+      const lastUrl = localStorage.getItem("nacosDashboard.nacosUrl") || "http://127.0.0.1:8848/nacos/";
+      MODAL.input.value = lastUrl;
+      hideModalError();
+      MODAL.submit.disabled = false;
+      MODAL.defaultBtn.disabled = false;
+      MODAL.overlay.hidden = false;
+      setTimeout(() => {
+        MODAL.input.focus();
+        MODAL.input.select();
+      }, 50);
+    }
+    showNacosModal();
+  </script>
+</body>
+</html>
