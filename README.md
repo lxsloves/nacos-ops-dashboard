@@ -52,7 +52,7 @@ stop.bat
 | bash / cmd | bash(系统自带)| cmd / PowerShell(系统自带)|
 | `envsubst` | gettext 包(`brew install gettext` / `apt install gettext-base`)| PowerShell 替代 |
 | `kill -0` 等 coreutils | 系统自带 | PowerShell `tasklist` 替代 |
-| reload-server | Python 3(系统自带)| PowerShell 5+(系统自带)|
+| reload-server | bash + BSD nc(Mac) / GNU nc(Linux)| PowerShell 5+ |
 
 **不需要任何额外安装**。如果某个工具真没装,`start.sh` / `start.bat` 会给出明确报错指引。
 

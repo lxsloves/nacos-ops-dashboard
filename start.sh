@@ -56,42 +56,28 @@ if [[ -f "$PID_FILE" ]] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
 fi
 
 # 启动 reload-server(用于前端弹窗动态改 Nacos 地址)
-# 选择策略:
-#   1. 优先 bash + nc(bin/reload-server.sh)— Linux 完美 0 依赖,Mac 上若启动失败自动 fallback
-#   2. fallback python3(reload-server.py)— 稳定可靠,Mac CLT 自带 python3
-#   3. 都不可用:提示弹窗功能不可用
+# 三平台选择:
+#   - Mac/Linux:bin/reload-server.sh(bash + nc,系统自带,0 依赖)
+#   - Windows:bin/reload-server.ps1(PowerShell + .NET HttpListener,系统自带)
+#   没有 Python fallback(避免引入额外运行时依赖)
 RELOAD_PID_FILE="$PROJECT_DIR/.reload-server.pid"
 RELOAD_LOG_FILE="$PROJECT_DIR/.reload-server.log"
 RELOAD_PORT="${RELOAD_PORT:-18081}"
 if [[ -f "$RELOAD_PID_FILE" ]] && kill -0 "$(cat "$RELOAD_PID_FILE")" 2>/dev/null; then
   : # reload-server 已在跑,跳过
+elif [[ -f "$PROJECT_DIR/bin/reload-server.sh" ]] && command -v nc >/dev/null 2>&1; then
+  nohup bash "$PROJECT_DIR/bin/reload-server.sh" "$PROJECT_DIR" >> "$RELOAD_LOG_FILE" 2>&1 &
+  RELOAD_PID=$!
+  echo "$RELOAD_PID" > "$RELOAD_PID_FILE"
+  # 等 0.5s,验证端口真的监听了(bash 3.2 + FIFO 在某些平台可能启动失败)
+  sleep 0.5
+  if ! lsof -nP -iTCP:"$RELOAD_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
+    echo "提示:reload-server.sh 启动失败(端口 $RELOAD_PORT 未监听),前端弹窗改地址功能不可用" >&2
+    kill "$RELOAD_PID" 2>/dev/null
+    rm -f "$RELOAD_PID_FILE"
+  fi
 else
-  RELOAD_STARTED=0
-  # 1. 优先 bash + nc
-  if [[ -f "$PROJECT_DIR/bin/reload-server.sh" ]] && command -v nc >/dev/null 2>&1; then
-    nohup bash "$PROJECT_DIR/bin/reload-server.sh" "$PROJECT_DIR" >> "$RELOAD_LOG_FILE" 2>&1 &
-    RELOAD_PID=$!
-    echo "$RELOAD_PID" > "$RELOAD_PID_FILE"
-    # 等 0.5s,验证端口真的监听了(bash 3.2 + FIFO 在某些平台可能启动失败)
-    sleep 0.5
-    if lsof -nP -iTCP:"$RELOAD_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-      RELOAD_STARTED=1
-    else
-      # bash reload-server 启动失败,清理后 fallback Python
-      kill "$RELOAD_PID" 2>/dev/null
-      rm -f "$RELOAD_PID_FILE"
-    fi
-  fi
-  # 2. fallback Python
-  if [[ "$RELOAD_STARTED" -eq 0 ]] && [[ -f "$PROJECT_DIR/bin/reload-server.py" ]] && command -v python3 >/dev/null 2>&1; then
-    nohup python3 "$PROJECT_DIR/bin/reload-server.py" "$PROJECT_DIR" >> "$RELOAD_LOG_FILE" 2>&1 &
-    echo $! > "$RELOAD_PID_FILE"
-    RELOAD_STARTED=1
-    sleep 0.3
-  fi
-  if [[ "$RELOAD_STARTED" -eq 0 ]]; then
-    echo "提示:找不到合适的 reload-server,前端弹窗改地址功能不可用(其他功能正常)" >&2
-  fi
+  echo "提示:找不到 reload-server.sh 或 nc,前端弹窗改地址功能不可用(其他功能正常)" >&2
 fi
 
 # 渲染模板 → 完整 nginx 主配置(events + http + server)
