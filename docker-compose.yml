@@ -1,0 +1,15 @@
+services:
+  dashboard:
+    build: .
+    container_name: nacos-ops-dashboard
+    ports:
+      - "18080:18080"
+    restart: unless-stopped
+    # 容器内 reload-server 监听 18081,不暴露给 host(通过 nginx 反代到前端)
+    # 如果要远程访问 reload-server,可以加 "18081:18081",但仅限本机调试
+
+# 用法:
+#   docker compose up -d --build      # 启动
+#   docker compose logs -f             # 看日志
+#   docker compose down                # 停止
+# 浏览器打开 http://localhost:18080/dashboard/

@@ -1,0 +1,23 @@
+# 排除不需要进镜像的文件
+.git/
+.gitignore
+
+# 运行产物
+*.log
+*.pid
+.nginx.*
+.reload-server.*
+
+# 系统垃圾
+.DS_Store
+*.swp
+
+# Mac/Win 启动脚本(容器用 docker-start.sh)
+start.sh
+stop.sh
+start.bat
+stop.bat
+install-nginx.bat
+
+# 项目文档(在 GitHub 看就行,不进镜像)
+README.md
