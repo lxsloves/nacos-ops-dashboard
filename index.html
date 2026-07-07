@@ -281,6 +281,18 @@
       margin-bottom: 10px;
     }
 
+    .table-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-icon {
+      height: 28px;
+      padding: 0 12px;
+      font-size: 12px;
+    }
+
     .section-title {
       margin: 0;
       font-size: 14px;
@@ -950,7 +962,10 @@
         ${state.loading ? `<div class="loading-overlay">正在处理,请稍候…</div>` : ""}
         <div class="table-header">
           <h2 class="section-title">实例列表</h2>
-          <span class="usage-note">默认按异常、下线、非默认集群优先排序</span>
+          <div class="table-header-actions">
+            <span class="usage-note">默认按异常、下线、非默认集群优先排序</span>
+            <button class="plain btn-icon" data-action="refresh" ${state.loading ? "disabled" : ""}>${state.loading ? "刷新中…" : "刷新"}</button>
+          </div>
         </div>
         <div class="batch-bar">
           <span>已选 ${selectedCount} 个实例 · 当前显示 ${rows.length} / ${state.instances.length}</span>
@@ -1249,6 +1264,10 @@
       const action = target.dataset.action;
       if (action === "connect") {
         await connectAndLoad();
+      }
+      if (action === "refresh") {
+        if (state.loading) return;
+        await reloadInstances();
       }
       if (action === "batch-enable") {
         await runBatch(true);
