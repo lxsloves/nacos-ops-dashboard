@@ -10,6 +10,9 @@ WORKDIR /app
 # 复制项目文件(.dockerignore 排除了 .git、运行产物、Mac/Win 脚本等)
 COPY . /app/
 
+# 删除 Mac/Win 平台的 nginx 二进制及伪二进制,容器用系统自带的 /usr/sbin/nginx
+RUN rm -f /app/bin/nginx /app/bin/nginx.exe /app/bin/nginx-darwin-arm64 /app/bin/nginx-windows-amd64.exe /app/bin/reload-server.ps1 /app/bin/reload-server.py
+
 # 启动入口
 RUN chmod +x /app/docker-start.sh
 EXPOSE 18080

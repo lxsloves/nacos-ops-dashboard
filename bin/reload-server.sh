@@ -65,10 +65,17 @@ EOF
 }
 
 reload_nginx() {
-  [[ -n "$NGINX_BIN" ]] || return 1
-  [[ -f "$NGINX_RENDERED" ]] || return 1
-  "$NGINX_BIN" -t -c "$NGINX_RENDERED" >/dev/null 2>&1 || return 1
-  "$NGINX_BIN" -s reload -c "$NGINX_RENDERED" >/dev/null 2>&1
+  local test_output
+  [[ -n "$NGINX_BIN" ]] || { printf '%s\n' "reload_nginx: NGINX_BIN empty" >> "$LOG_FILE"; return 1; }
+  [[ -f "$NGINX_RENDERED" ]] || { printf '%s\n' "reload_nginx: $NGINX_RENDERED not found" >> "$LOG_FILE"; return 1; }
+  test_output=$("$NGINX_BIN" -t -c "$NGINX_RENDERED" 2>&1) || {
+    printf '%s\n' "reload_nginx: config test failed: $test_output" >> "$LOG_FILE"
+    return 1
+  }
+  if ! "$NGINX_BIN" -s reload -c "$NGINX_RENDERED" 2>/dev/null; then
+    printf '%s\n' "reload_nginx: reload signal failed" >> "$LOG_FILE"
+    return 1
+  fi
 }
 
 log_request() {
@@ -101,12 +108,10 @@ handle_request() {
     fi
   done
 
-  # 读 body(用 read -n 而不是 read -N,因为后者是 bash 4+ 才支持)
+  # 读 body(dd 逐字节读取,比 read -n 在管道中更可靠)
   body=""
   if [[ "$content_length" -gt 0 ]]; then
-    if ! IFS= read -r -n "$content_length" body 2>/dev/null; then
-      body=""
-    fi
+    body=$(dd bs=1 count="$content_length" 2>/dev/null)
   fi
 
   # 路由
