@@ -1063,6 +1063,27 @@
       return instances;
     }
 
+    // 仅重查当前 namespace 下的 services + instances,不重置 filters / namespaces
+    // 用于切 serviceName filter 时拉最新数据
+    async function reloadInstances() {
+      state.loading = true;
+      render();
+      try {
+        await loginIfNeeded();
+        const services = await loadServices();
+        const batches = services.map(loadInstancesForService);
+        const results = await Promise.all(batches);
+        state.instances = results.flat();
+        state.connected = true;
+        pushDiagnostic(`已刷新 ${services.length} 个服务、${state.instances.length} 个实例`);
+      } catch (error) {
+        pushDiagnostic(explainError(error));
+      } finally {
+        state.loading = false;
+        render();
+      }
+    }
+
     async function connectAndLoad() {
       state.loading = true;
       render();
@@ -1167,6 +1188,13 @@
       render();
     }
 
+    // 切 serviceName filter 时重查服务端(其他 filter 走纯 client filter)
+    async function reloadOnFilterChange(target) {
+      updateStateFromInput(target);
+      state.selectedKeys.clear();
+      await reloadInstances();
+    }
+
     document.addEventListener("input", (event) => {
       const target = event.target;
       if (target.matches("[data-state], [data-filter]")) {
@@ -1193,7 +1221,12 @@
         }
       }
       if (target.matches("[data-filter]")) {
-        applyFilterChange(target);
+        // serviceName 切换时重查服务端(数据可能已变),其他 filter 走纯 client filter
+        if (target.dataset.filter === "serviceName") {
+          await reloadOnFilterChange(target);
+        } else {
+          applyFilterChange(target);
+        }
       }
     });
 
