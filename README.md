@@ -72,6 +72,19 @@ stop.bat
 
 默认 18080,要换就改 `nginx-local.conf` 第 2 行 `listen`,然后重启。
 
+## 已知限制:Docker Desktop for Mac 访问不到内网 Nacos
+
+如果你在 Mac 上用 `docker compose up -d` 跑,dashboard 反代到 **Mac 主机的内网 Nacos** 会失败(返回 504/502)。
+
+**根因**:Docker Desktop 的 Docker 引擎是跑在一个 Linux 虚机里的(QEMU/HyperKit),这个 VM 跟 Mac 主机的网络栈是隔开的,容器无论走 bridge 还是 host 模式都到不了 Mac 的内网段(比如 `172.x` / `10.x` / `192.168.x` 等)。
+
+**绕法**:
+- **本机用 `./start.sh` 启动**(最简单),不走 Docker,直接走 Mac 自己的网络栈,内网/公网都通
+- **Nacos 换成公网地址**,容器反代到公网 Nacos 是通的
+- **在 Linux 机器上跑 Docker**(物理机/VM/云),没这限制
+
+普通 Linux 上跑 Docker 没这个问题。
+
 ## 安全
 
 - 仅监听本机 (`allow 127.0.0.1`, `deny all`)

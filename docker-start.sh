@@ -12,6 +12,15 @@ LOG_FILE="$PROJECT_DIR/.nginx.log"
 RELOAD_PID_FILE="$PROJECT_DIR/.reload-server.pid"
 RELOAD_LOG_FILE="$PROJECT_DIR/.reload-server.log"
 
+# 0. 屏蔽 bin/ 里的 host 平台 nginx 软链接(指向 nginx-darwin-arm64 / nginx-windows-amd64.exe)
+# reload-server.sh 找 nginx 时优先用 bin/nginx-<os>-<arch> / bin/nginx,会拿到不兼容的 host 二进制;
+# 移走让它 fallback 到 command -v nginx = 容器自带的 /usr/sbin/nginx。
+for link in "$PROJECT_DIR/bin/nginx" "$PROJECT_DIR/bin/nginx-darwin-arm64" "$PROJECT_DIR/bin/nginx-windows-amd64.exe"; do
+  if [[ -L "$link" ]]; then
+    mv "$link" "${link}.disabled-by-docker"
+  fi
+done
+
 # 1. 渲染 nginx 配置(容器内 worker 跑 root 避免权限问题)
 export DASHBOARD_ROOT="$PROJECT_DIR"
 {
