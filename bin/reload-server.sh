@@ -1,22 +1,27 @@
 #!/usr/bin/env bash
-# reload-server.sh - bash + nc 实现的 Nacos URL 热更新服务
+# reload-server.sh - Nacos URL 热更新服务入口
 # 用法(start.sh 调用): bash bin/reload-server.sh <project_dir> [port]
 #
-# 跨平台 0 额外依赖:
-#   Linux bash 4+/5+:bash + nc + coreutils 都是系统默认
-#   macOS bash 3.2.57:Apple 自带的旧版 bash + BSD nc + coreutils,够用
+# 优先 Ruby WEBrick(macOS 自带,持久监听,且会 daemonize 脱离 IDE shell);
+# 否则回退 bash+nc。
 
 set -euo pipefail
 
 PROJECT_DIR="${1:-$(pwd)}"
 PORT="${2:-18081}"
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+if command -v ruby >/dev/null 2>&1 && [[ -f "$SELF_DIR/reload-server.rb" ]] \
+  && ruby -rwebrick -e 'exit 0' 2>/dev/null; then
+  exec ruby "$SELF_DIR/reload-server.rb" "$PROJECT_DIR" "$PORT"
+fi
+
+# ---------- 回退:bash + nc ----------
 NGINX_CONF="$PROJECT_DIR/nginx-local.conf"
 NGINX_RENDERED="$PROJECT_DIR/.nginx.rendered.conf"
 PID_FILE="$PROJECT_DIR/.reload-server.pid"
 LOG_FILE="$PROJECT_DIR/.reload-server.log"
 
-# ---------- nginx 二进制定位 ----------
 find_nginx() {
   local os arch p
   os=$(uname -s | tr 'A-Z' 'a-z')
@@ -33,7 +38,6 @@ find_nginx() {
 
 NGINX_BIN="$(find_nginx)"
 
-# ---------- URL 读写 ----------
 get_nacos_url() {
   [[ -f "$NGINX_CONF" ]] || { printf '\n'; return; }
   grep -oE 'proxy_pass[[:space:]]+https?://[^/]+/nacos/;' "$NGINX_CONF" 2>/dev/null \
@@ -75,11 +79,9 @@ log_request() {
   printf '%s %s\n' "$(date -u +%FT%TZ)" "$1" >> "$LOG_FILE"
 }
 
-# ---------- HTTP 处理单个请求(从 stdin 读,响应写到 stdout) ----------
 handle_request() {
-  local request_line method path line content_length body status resp_body url host lower
+  local request_line method path line content_length body status resp_body url host lower proto clean_url
 
-  # 读 request line(GET /api/xxx HTTP/1.1)
   if ! IFS= read -r request_line; then
     return 1
   fi
@@ -87,9 +89,8 @@ handle_request() {
   method="${request_line%% *}"
   path="${request_line#* }"
   path="${path%% *}"
-  path="${path%\?*}"  # 去掉 query string
+  path="${path%\?*}"
 
-  # 读 headers,空行结束
   content_length=0
   while IFS= read -r line; do
     line="${line%$'\r'}"
@@ -101,7 +102,6 @@ handle_request() {
     fi
   done
 
-  # 读 body(用 read -n 而不是 read -N,因为后者是 bash 4+ 才支持)
   body=""
   if [[ "$content_length" -gt 0 ]]; then
     if ! IFS= read -r -n "$content_length" body 2>/dev/null; then
@@ -109,7 +109,6 @@ handle_request() {
     fi
   fi
 
-  # 路由
   status=200
   resp_body=""
   case "$path" in
@@ -122,11 +121,8 @@ handle_request() {
         resp_body="{\"url\":\"$url\"}"
       elif [[ "$method" == "POST" ]]; then
         url=$(printf '%s' "$body" | sed -nE 's|.*"url"[[:space:]]*:[[:space:]]*"([^"]+)".*|\1|p')
-        # 放宽:接受完整浏览器 URL(包含 fragment/query/path 都行),只要 protocol://host[:port]/nacos 在
-        # 例:"http://172.18.66.210:8848/nacos/#/serviceManagement?..." → host=172.18.66.210:8848
         if [[ "$url" =~ ^https?://([^/]+)/nacos(/|$|[?#]) ]]; then
           host="${BASH_REMATCH[1]}"
-          # 规范化 url:根据原始 url 的协议返回干净的 protocol://host/nacos/
           proto="http"
           [[ "$url" =~ ^https:// ]] && proto="https"
           clean_url="${proto}://${host}/nacos/"
@@ -148,7 +144,6 @@ handle_request() {
       ;;
   esac
 
-  # 输出 HTTP 响应(Content-Length 必须是字节数,对中文要用 wc -c,不能用 ${#resp_body} 字符数)
   local body_bytes
   body_bytes=$(printf '%s' "$resp_body" | wc -c | tr -d ' ')
   printf 'HTTP/1.1 %s OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: %d\r\nAccess-Control-Allow-Origin: *\r\nAccess-Control-Allow-Methods: GET, POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\nConnection: close\r\n\r\n%s' \
@@ -158,7 +153,6 @@ handle_request() {
   return 0
 }
 
-# ---------- 检测 nc 类型(Mac/BSD 用 BSD nc,Linux 用 GNU nc) ----------
 detect_nc() {
   case "$(uname -s)" in
     Darwin|*BSD) echo "nc -l 127.0.0.1 $PORT" ;;
@@ -168,12 +162,20 @@ detect_nc() {
 
 NC_CMD=$(detect_nc)
 
-# ---------- 启动 ----------
+# bash+nc 也尽量脱离会话(mac 无 setsid 时退化为 nohup 已有的行为)
+if command -v setsid >/dev/null 2>&1; then
+  # re-exec under setsid once
+  if [[ -z "${RELOAD_SETSID:-}" ]]; then
+    export RELOAD_SETSID=1
+    exec setsid bash "$0" "$PROJECT_DIR" "$PORT"
+  fi
+fi
+
 echo $$ > "$PID_FILE"
 log_request "reload-server (bash+nc) listening on 0.0.0.0:$PORT"
-trap 'rm -f "$PID_FILE" 2>/dev/null' EXIT INT TERM
+trap '' PIPE
+trap '[[ "$(cat "$PID_FILE" 2>/dev/null)" == "$$" ]] && rm -f "$PID_FILE"' EXIT INT TERM
 
-# 主循环:每次连接用 FIFO 把响应写回 nc
 while true; do
   RESP=$(mktemp -u)
   if ! mkfifo "$RESP" 2>/dev/null; then
@@ -181,8 +183,6 @@ while true; do
     sleep 0.5
     continue
   fi
-  # nc 把客户端输入转给 handle_request 的 stdin
-  # handle_request 的 stdout 通过 $RESP 写回 nc 的 stdin(nc 再写回客户端)
   bash -c "$NC_CMD < '$RESP'" 2>/dev/null | handle_request > "$RESP" 2>/dev/null || true
   rm -f "$RESP"
 done

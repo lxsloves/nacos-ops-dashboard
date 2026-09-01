@@ -39,13 +39,20 @@ if [[ ! -x "$NGINX_BIN" ]]; then
   NGINX_BIN="$(command -v nginx || true)"
 fi
 
-# 先停 reload-server
+# 先停 reload-server(bash 父进程 + 可能残留的 nc 子进程)
+RELOAD_PORT="${RELOAD_PORT:-18081}"
 if [[ -f "$RELOAD_PID_FILE" ]]; then
   RPID="$(cat "$RELOAD_PID_FILE")"
   if kill -0 "$RPID" 2>/dev/null; then
     kill "$RPID" 2>/dev/null || true
   fi
   rm -f "$RELOAD_PID_FILE"
+fi
+# macOS nc 允许多个进程同时 listen 同一端口(SO_REUSEPORT),孤儿 nc 不杀掉会 502
+if command -v lsof >/dev/null 2>&1; then
+  for p in $(lsof -t -nP -iTCP:"$RELOAD_PORT" -sTCP:LISTEN 2>/dev/null || true); do
+    kill "$p" 2>/dev/null || true
+  done
 fi
 
 if [[ ! -f "$PID_FILE" ]]; then

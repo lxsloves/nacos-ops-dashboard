@@ -63,21 +63,38 @@ fi
 RELOAD_PID_FILE="$PROJECT_DIR/.reload-server.pid"
 RELOAD_LOG_FILE="$PROJECT_DIR/.reload-server.log"
 RELOAD_PORT="${RELOAD_PORT:-18081}"
-if [[ -f "$RELOAD_PID_FILE" ]] && kill -0 "$(cat "$RELOAD_PID_FILE")" 2>/dev/null; then
-  : # reload-server 已在跑,跳过
-elif [[ -f "$PROJECT_DIR/bin/reload-server.sh" ]] && command -v nc >/dev/null 2>&1; then
-  nohup bash "$PROJECT_DIR/bin/reload-server.sh" "$PROJECT_DIR" >> "$RELOAD_LOG_FILE" 2>&1 &
-  RELOAD_PID=$!
-  echo "$RELOAD_PID" > "$RELOAD_PID_FILE"
-  # 等 0.5s,验证端口真的监听了(bash 3.2 + FIFO 在某些平台可能启动失败)
-  sleep 0.5
-  if ! lsof -nP -iTCP:"$RELOAD_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
-    echo "提示:reload-server.sh 启动失败(端口 $RELOAD_PORT 未监听),前端弹窗改地址功能不可用" >&2
-    kill "$RELOAD_PID" 2>/dev/null
-    rm -f "$RELOAD_PID_FILE"
+# 清掉残留 nc:macOS 允许多个进程 listen 同端口,孤儿会把请求打成 502
+if command -v lsof >/dev/null 2>&1; then
+  for p in $(lsof -t -nP -iTCP:"$RELOAD_PORT" -sTCP:LISTEN 2>/dev/null || true); do
+    kill "$p" 2>/dev/null || true
+  done
+fi
+if [[ -f "$RELOAD_PID_FILE" ]]; then
+  old="$(cat "$RELOAD_PID_FILE")"
+  kill "$old" 2>/dev/null || true
+  rm -f "$RELOAD_PID_FILE"
+fi
+if [[ -f "$PROJECT_DIR/bin/reload-server.sh" ]] && { command -v ruby >/dev/null 2>&1 || command -v nc >/dev/null 2>&1; }; then
+  sleep 0.2
+  # Ruby 路径会 Process.daemon,$! 是短命父进程;pid 以探活后读 .reload-server.pid 为准
+  nohup bash "$PROJECT_DIR/bin/reload-server.sh" "$PROJECT_DIR" >> "$RELOAD_LOG_FILE" 2>&1 </dev/null &
+  ok=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.25
+    if curl -sf -m 1 "http://127.0.0.1:${RELOAD_PORT}/api/health" >/dev/null 2>&1; then
+      ok=1
+      break
+    fi
+  done
+  if [[ "$ok" -ne 1 ]]; then
+    echo "提示:reload-server 启动失败(端口 $RELOAD_PORT 探活失败),前端弹窗改地址功能不可用" >&2
+    if [[ -f "$RELOAD_PID_FILE" ]]; then
+      kill "$(cat "$RELOAD_PID_FILE")" 2>/dev/null || true
+      rm -f "$RELOAD_PID_FILE"
+    fi
   fi
 else
-  echo "提示:找不到 reload-server.sh 或 nc,前端弹窗改地址功能不可用(其他功能正常)" >&2
+  echo "提示:找不到 reload-server.sh / ruby / nc,前端弹窗改地址功能不可用(其他功能正常)" >&2
 fi
 
 # 渲染模板 → 完整 nginx 主配置(events + http + server)
