@@ -399,9 +399,29 @@
     }
 
     .metadata {
-      max-width: 260px;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      max-width: 320px;
+      white-space: normal;
+      color: var(--muted);
+    }
+
+    .metadata-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+
+    .metadata-item {
+      display: inline-flex;
+      gap: 4px;
+      padding: 2px 6px;
+      border: 1px solid var(--line-soft);
+      border-radius: 4px;
+      background: #f7f9fc;
+      color: #344054;
+      font-size: 12px;
+    }
+
+    .metadata-key {
       color: var(--muted);
     }
 
@@ -662,6 +682,23 @@
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
     }
+
+    function formatMetadataValue(value) {
+      if (value === true || value === "true") return "是";
+      if (value === false || value === "false") return "否";
+      if (value === null || value === undefined || value === "") return "未填写";
+      return typeof value === "object" ? JSON.stringify(value) : String(value);
+    }
+
+    function renderMetadata(metadata) {
+      const entries = metadata && typeof metadata === "object" ? Object.entries(metadata) : [];
+      if (entries.length === 0) return "无";
+      return `<div class="metadata-list">${entries.map(([key, value]) => `
+        <span class="metadata-item"><span class="metadata-key">${escapeHtml(key)}：</span>${escapeHtml(formatMetadataValue(value))}</span>
+      `).join("")}</div>`;
+    }
+
+    console.assert(formatMetadataValue(true) === "是" && renderMetadata({ env: "prod" }).includes("env："), "metadata formatter failed");
 
     function pushDiagnostic(message) {
       state.diagnostics.unshift(`${new Date().toLocaleTimeString()} ${message}`);
@@ -947,7 +984,7 @@
             <td><span class="status ${item.healthy ? "good" : "bad"}">${item.healthy ? "健康" : "异常"}</span></td>
             <td><span class="status ${item.enabled ? "good" : "warn"}">${item.enabled ? "上线" : "下线"}</span></td>
             <td>${escapeHtml(item.weight)}</td>
-            <td class="metadata" title="${escapeHtml(metadata)}">${escapeHtml(metadata)}</td>
+            <td class="metadata" title="${escapeHtml(metadata)}">${renderMetadata(item.metadata)}</td>
             <td>
               <div class="row-actions">
                 ${item.enabled
@@ -986,7 +1023,7 @@
                 <th>健康</th>
                 <th>上线</th>
                 <th>权重</th>
-                <th>Metadata</th>
+                <th>附加信息</th>
                 <th>操作</th>
               </tr>
             </thead>
