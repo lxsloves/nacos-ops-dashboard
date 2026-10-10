@@ -421,6 +421,13 @@
       font-size: 12px;
     }
 
+    .metadata-item.is-highlight {
+      border-color: #e5b700;
+      background: #fff4cc;
+      color: #7a4f01;
+      font-weight: 650;
+    }
+
     .metadata-key {
       color: var(--muted);
     }
@@ -690,15 +697,19 @@
       return typeof value === "object" ? JSON.stringify(value) : String(value);
     }
 
+    function isHighlightedMetadataKey(key) {
+      return /version|tag/i.test(String(key));
+    }
+
     function renderMetadata(metadata) {
       const entries = metadata && typeof metadata === "object" ? Object.entries(metadata) : [];
       if (entries.length === 0) return "无";
       return `<div class="metadata-list">${entries.map(([key, value]) => `
-        <span class="metadata-item"><span class="metadata-key">${escapeHtml(key)}：</span>${escapeHtml(formatMetadataValue(value))}</span>
+        <span class="metadata-item${isHighlightedMetadataKey(key) ? " is-highlight" : ""}"><span class="metadata-key">${escapeHtml(key)}：</span>${escapeHtml(formatMetadataValue(value))}</span>
       `).join("")}</div>`;
     }
 
-    console.assert(formatMetadataValue(true) === "是" && renderMetadata({ env: "prod" }).includes("env："), "metadata formatter failed");
+    console.assert(formatMetadataValue(true) === "是" && renderMetadata({ env: "prod", version: "1.0" }).includes("is-highlight"), "metadata formatter failed");
 
     function pushDiagnostic(message) {
       state.diagnostics.unshift(`${new Date().toLocaleTimeString()} ${message}`);
