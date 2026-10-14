@@ -134,10 +134,6 @@
       gap: 8px;
     }
 
-    .side-panel .filter-grid .check-field {
-      grid-column: 1 / -1;
-    }
-
     .side-panel .diagnostics {
       min-height: 220px;
       overflow: auto;
@@ -166,8 +162,7 @@
       min-width: 0;
     }
 
-    .field label,
-    .check-field {
+    .field label {
       color: var(--muted);
       font-size: 12px;
     }
@@ -287,6 +282,31 @@
       gap: 10px;
     }
 
+    .filter-actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .filter-actions button {
+      flex: 1;
+      height: 38px;
+      font-size: 14px;
+      border-color: var(--primary);
+      color: var(--primary);
+      background: #eef2ff;
+    }
+
+    .filter-actions button.primary {
+      background: var(--primary);
+      color: #fff;
+    }
+
+    .filter-actions button:focus-visible {
+      outline: 2px solid var(--primary);
+      outline-offset: 2px;
+    }
+
     .btn-icon {
       height: 28px;
       padding: 0 12px;
@@ -297,19 +317,6 @@
       margin: 0;
       font-size: 14px;
       letter-spacing: 0;
-    }
-
-    .check-field {
-      height: 34px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-
-    .check-field input {
-      width: 16px;
-      height: 16px;
-      padding: 0;
     }
 
     .batch-bar {
@@ -667,8 +674,7 @@
         ip: "",
         groupName: "",
         healthy: "all",
-        enabled: "all",
-        riskOnly: false
+        enabled: "all"
       },
       diagnostics: []
     };
@@ -841,7 +847,6 @@
           if (state.filters.groupName && item.groupName !== state.filters.groupName) return false;
           if (state.filters.healthy !== "all" && String(item.healthy) !== state.filters.healthy) return false;
           if (state.filters.enabled !== "all" && String(item.enabled) !== state.filters.enabled) return false;
-          if (state.filters.riskOnly && item.healthy && item.enabled) return false;
           return true;
         })
         .sort((a, b) => {
@@ -928,11 +933,11 @@
       selectors.filter.innerHTML = `
         <div class="filter-header">
           <h2 class="section-title">实例筛选</h2>
-          <div class="table-header-actions">
-            <span class="usage-note" data-filter-summary>${getFilterSummaryText()}</span>
-            <button class="plain btn-icon" data-action="refresh" ${state.loading ? "disabled" : ""}>${state.loading ? "刷新中…" : "刷新"}</button>
-            <button class="btn-icon" data-action="reset-filters">重置</button>
-          </div>
+          <span class="usage-note" data-filter-summary>${getFilterSummaryText()}</span>
+        </div>
+        <div class="filter-actions">
+          <button class="primary" data-action="refresh" ${state.loading ? "disabled" : ""}>${state.loading ? "刷新中…" : "刷新"}</button>
+          <button data-action="reset-filters">重置</button>
         </div>
         <div class="filter-grid">
           <div class="field namespace-filter span-2">
@@ -975,10 +980,6 @@
               <option value="false" ${state.filters.enabled === "false" ? "selected" : ""}>下线</option>
             </select>
           </div>
-          <label class="check-field span-2">
-            <input type="checkbox" data-filter="riskOnly" ${state.filters.riskOnly ? "checked" : ""}>
-            仅看异常/下线
-          </label>
         </div>
       `;
     }
@@ -1309,8 +1310,7 @@
           ip: "",
           groupName: "",
           healthy: "all",
-          enabled: "all",
-          riskOnly: false
+          enabled: "all"
         };
         state.selectedKeys.clear();
         render();
