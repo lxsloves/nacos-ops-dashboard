@@ -928,7 +928,11 @@
       selectors.filter.innerHTML = `
         <div class="filter-header">
           <h2 class="section-title">实例筛选</h2>
-          <span class="usage-note" data-filter-summary>${getFilterSummaryText()}</span>
+          <div class="table-header-actions">
+            <span class="usage-note" data-filter-summary>${getFilterSummaryText()}</span>
+            <button class="plain btn-icon" data-action="refresh" ${state.loading ? "disabled" : ""}>${state.loading ? "刷新中…" : "刷新"}</button>
+            <button class="btn-icon" data-action="reset-filters">重置</button>
+          </div>
         </div>
         <div class="filter-grid">
           <div class="field namespace-filter span-2">
@@ -1010,10 +1014,7 @@
         ${state.loading ? `<div class="loading-overlay">正在处理,请稍候…</div>` : ""}
         <div class="table-header">
           <h2 class="section-title">实例列表</h2>
-          <div class="table-header-actions">
-            <span class="usage-note">默认按异常、下线、非默认集群优先排序</span>
-            <button class="plain btn-icon" data-action="refresh" ${state.loading ? "disabled" : ""}>${state.loading ? "刷新中…" : "刷新"}</button>
-          </div>
+
         </div>
         <div class="batch-bar">
           <span>已选 ${selectedCount} 个实例 · 当前显示 ${rows.length} / ${state.instances.length}</span>
@@ -1151,14 +1152,6 @@
       state.loading = true;
       render();
       try {
-        // 重置所有筛选条件(新进入/刷新后从干净状态开始)
-        state.filters.serviceName = "";
-        state.filters.ip = "";
-        state.filters.groupName = "";
-        state.filters.healthy = "all";
-        state.filters.enabled = "all";
-        state.filters.riskOnly = false;
-
         await loginIfNeeded();
         try {
           const data = await requestJson("/v1/console/namespaces");
@@ -1310,6 +1303,18 @@
       const target = event.target.closest("[data-action]");
       if (!target) return;
       const action = target.dataset.action;
+      if (action === "reset-filters") {
+        state.filters = {
+          serviceName: "",
+          ip: "",
+          groupName: "",
+          healthy: "all",
+          enabled: "all",
+          riskOnly: false
+        };
+        state.selectedKeys.clear();
+        render();
+      }
       if (action === "connect") {
         await connectAndLoad();
       }
