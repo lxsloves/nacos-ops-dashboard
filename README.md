@@ -7,6 +7,7 @@
 - 浏览本机 Nacos (`127.0.0.1:8848`) 的服务和实例
 - 按 namespace / group / IP / 健康状态 / 上线状态筛选
 - 批量上下线实例
+- 在「MQ 消费管理」查看消费状态，按实例单独或批量暂停、恢复
 - 浏览器里**弹窗配置 Nacos 地址**,自动写入 nginx 并 reload,无需重启
 
 不是 Nacos 官方控制台的替代品,只是平时手动操作实例时省得在原版控制台里翻页面。
@@ -63,6 +64,14 @@ stop.bat
 - 提交后:改 `nginx-local.conf` → 重新渲染 → `nginx -s reload`,秒级生效
 - 之后刷新页面不再弹窗(因为配置已经不是默认值)
 - 想换地址:手动编辑 `nginx-local.conf` 第 22 行 `proxy_pass`,然后跑 `./start.sh`(会自动 reload)
+
+## MQ 消费管理
+
+从 Dashboard 的「MQ 消费管理」打开 `/dashboard/mq.html`。页面列出 AI 异步轮询、画布重拍拼接、积分及返佣/存储扩容三个消费者服务的 HTTP 实例，可按服务、版本、消费状态筛选。暂停后等到该行显示「已暂停」，再进行实例下线或发布。
+
+将 `nginx-local.conf` 的 `/mq-api/` 代理指向可达的目标环境 Gateway，保留上游路径 `/ops/mq/`。默认目标为本机 `127.0.0.1:10403`；用 Docker 时应填容器可访问的地址。本页显示 Gateway 返回的 Namespace，操作前核对环境。使用目标环境的超级管理员 Authorization Token 和 clientid 加载实例，凭据仅保留在页面内存。
+
+Gateway 与三个消费者部署支持 MQ 运维接口的版本，并使用同一环境的 `MQ_OPS_TOKEN`（或 `mq-ops.internal-token`）。该内部凭据仅配置在服务端。修改 Dashboard 代理后，用现有启动方式重新加载配置。
 
 ## 升级 nginx
 

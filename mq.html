@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MQ 消费管理</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font: 14px/1.5 system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #182435;
+      background: #f5f7fb;
+      --line: #dbe3ee;
+      --muted: #55647b;
+      --ok: #08724e;
+      --danger: #ac2229;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1680px; margin: auto; padding: 28px clamp(12px, 3vw, 40px); }
+    h1, h2, p { margin: 0; }
+    h1 { font-size: 25px; }
+    h2 { font-size: 16px; }
+    .heading, .toolbar, .filters, .actions, .scope { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .heading, .toolbar { justify-content: space-between; }
+    .scope, .muted { color: var(--muted); }
+    .scope { margin-top: 6px; column-gap: 18px; }
+    .scope strong { color: #182435; }
+    .inventory { margin: 16px 0; }
+    .inventory ul { margin: 8px 0 0; padding-left: 20px; }
+    summary { cursor: pointer; }
+    .panel { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+    .toolbar { margin: 14px 0 10px; }
+    .filters label { display: flex; align-items: center; gap: 6px; }
+    button, select, input { font: inherit; }
+    button, select, input:not([type=checkbox]) {
+      color: inherit; border: 1px solid #aebdd0; border-radius: 6px; background: #fff; min-height: 34px; padding: 4px 10px;
+    }
+    button { cursor: pointer; white-space: nowrap; }
+    button:hover:not(:disabled) { box-shadow: inset 0 0 0 1px currentColor; }
+    button:disabled { opacity: .55; cursor: default; }
+    button.pause { color: var(--danger); background: #fff2f3; border-color: #efaab0; }
+    button.resume { color: var(--ok); background: #edfaf4; border-color: #93d6ba; }
+    .page-link {
+      display: inline-flex; align-items: center; min-height: 34px; padding: 4px 10px;
+      border: 1px solid var(--line); border-radius: 6px; color: #2454ff; background: #fff;
+      font-weight: 650; text-decoration: none; white-space: nowrap;
+    }
+    .page-link:hover { border-color: #2454ff; }
+    :focus-visible { outline: 2px solid #3462b0; outline-offset: 3px; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+    table { border-collapse: collapse; width: 100%; min-width: 900px; text-align: left; }
+    th { color: #354459; background: #f1f5fa; font-size: 13px; white-space: nowrap; }
+    th, td { padding: 10px 12px; border-bottom: 1px solid #e8edf4; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: #f8faff; }
+    td:first-child, th:first-child { width: 42px; text-align: center; }
+    td { overflow-wrap: anywhere; }
+    .cell-detail { display: block; max-width: 360px; margin-top: 4px; color: var(--danger); font-size: 12px; }
+    .address, .version { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+    .ok { color: var(--ok); background: #e6f8ef; }
+    .warn { color: #794a00; background: #fff2cf; }
+    .bad { color: var(--danger); background: #feeaec; }
+    .neutral { color: #45566c; background: #ecf1f7; }
+    .progress { color: #214e9e; background: #eaf1ff; }
+    .version { border: 1px solid #f1d18a; border-radius: 4px; padding: 1px 6px; color: #6e4604; background: #fff8df; }
+    #empty { text-align: center; padding: 20px 12px; }
+    #auth, #discovery, #results, #notice:not(:empty) { margin: 0 0 12px; }
+    #auth { border-color: #f1d18a; }
+    #auth form { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin-top: 10px; }
+    #auth label { display: grid; gap: 3px; }
+    #auth label:first-child { flex: 1 1 250px; max-width: 360px; }
+    #discovery, #results { padding: 8px 12px; border-radius: 6px; background: #f3f6fa; }
+    #discovery ul, #results ul { margin: 4px 0 0; padding-left: 20px; overflow-wrap: anywhere; }
+    .error-text { color: var(--danger); }
+    dialog {
+      width: min(640px, calc(100% - 24px)); padding: 20px; border: 1px solid var(--line); border-radius: 10px;
+      color: inherit; box-shadow: 0 12px 30px #18243525;
+    }
+    dialog::backdrop { background: #18243570; }
+    dialog p { margin-top: 8px; }
+    dialog ul { max-height: 45vh; overflow: auto; padding-left: 22px; overflow-wrap: anywhere; }
+    dialog .actions { justify-content: flex-end; }
+    @media (max-width: 620px) {
+      main { padding-top: 16px; }
+      .panel { padding: 12px; }
+      .toolbar { align-items: start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header class="heading">
+    <div>
+      <h1>MQ 消费管理</h1>
+      <div class="scope">
+        <span>命名空间 <strong id="namespace">—</strong></span>
+        <span>分组 <strong id="group">—</strong></span>
+      </div>
+    </div>
+    <div class="actions">
+      <a class="page-link" href="/dashboard/">返回 Nacos 看板</a>
+      <button type="button" id="refresh">刷新实例</button>
+    </div>
+  </header>
+  <details class="inventory">
+    <summary>服务覆盖范围</summary>
+    <ul>
+      <li>yueyi-ai（AI 异步轮询）</li>
+      <li>yueyi-canvas（画布重拍拼接）</li>
+      <li>yueyi-point-consumer（积分、存储扩容、返佣）</li>
+      <li>仅发送 MQ 消息的服务：yueyi-system、yueyi-user、yueyi-order、yueyi-backend</li>
+    </ul>
+  </details>
+  <section class="panel" id="auth" aria-labelledby="auth-title" hidden>
+    <h2 id="auth-title">需要超级管理员授权</h2>
+    <form id="auth-form" autocomplete="off">
+      <label>Authorization Token
+        <input id="token" type="password" required autocomplete="off" spellcheck="false">
+      </label>
+      <label>clientid
+        <input id="clientid" required autocomplete="off" spellcheck="false">
+      </label>
+      <button type="submit">验证并加载</button>
+    </form>
+  </section>
+  <section class="panel" aria-labelledby="instances-title">
+    <h2 id="instances-title">实例列表</h2>
+    <div class="toolbar">
+      <div class="filters">
+        <label>服务 <select id="service-filter">
+          <option value="">全部服务</option>
+          <option>yueyi-ai</option>
+          <option>yueyi-canvas</option>
+          <option>yueyi-point-consumer</option>
+        </select></label>
+        <label>版本 <select id="version-filter"><option value="">全部版本</option></select></label>
+        <label>消费状态 <select id="state-filter"><option value="">全部状态</option></select></label>
+      </div>
+      <div class="actions">
+        <span id="selection" class="muted"></span>
+        <button type="button" id="batch-resume" class="resume" disabled>批量恢复</button>
+        <button type="button" id="batch-pause" class="pause" disabled>批量暂停</button>
+      </div>
+    </div>
+    <p id="notice" class="muted" role="status"></p>
+    <div id="discovery" role="status" hidden>
+      <strong>服务发现异常</strong>
+      <ul></ul>
+    </div>
+    <div id="results" role="status" hidden>
+      <strong>操作结果</strong>
+      <ul></ul>
+    </div>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="MQ 消费实例表">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col"><input id="select-all" type="checkbox" aria-label="选择当前可操作实例"></th>
+            <th scope="col">服务名</th>
+            <th scope="col">IP:端口</th>
+            <th scope="col">集群</th>
+            <th scope="col">版本</th>
+            <th scope="col">健康</th>
+            <th scope="col">注册状态</th>
+            <th scope="col">消费状态</th>
+            <th scope="col">在途消息</th>
+            <th scope="col">操作</th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <p id="empty" class="muted"></p>
+    </div>
+  </section>
+</main>
+<dialog id="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-scope">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-scope"></p>
+    <ul id="confirm-targets"></ul>
+    <div class="actions">
+      <button value="cancel" autofocus>取消</button>
+      <button id="confirm-action" value="apply"></button>
+    </div>
+  </form>
+</dialog>
+<script>
+  'use strict';
+
+  const byId = (id) => document.getElementById(id);
+  const stateLabels = new Map([
+    ['RUNNING', ['消费中', 'ok']],
+    ['STARTING', ['启动中', 'progress']],
+    ['DRAINING', ['排空中', 'progress']],
+    ['PAUSED', ['已暂停', 'neutral']],
+    ['PARTIAL', ['部分运行', 'warn']],
+    ['UNAVAILABLE', ['不可用', 'bad']]
+  ]);
+  for (const [value, [label]] of stateLabels) {
+    byId('state-filter').add(new Option(label, value));
+  }
+
+  const selection = new Set();
+  const dialog = byId('confirm');
+  const auth = byId('auth');
+  let credentials;
+  let snapshot;
+  let stale = true;
+  let loading = false;
+  let operating = false;
+  let poll;
+  let confirmation;
+
+  class RequestError extends Error {
+    constructor(message, status) {
+      super(message);
+      this.status = status;
+    }
+  }
+
+  async function request(url, body) {
+    const headers = new Headers({ Accept: 'application/json' });
+    if (credentials) {
+      headers.set('Authorization', credentials.token);
+      headers.set('clientid', credentials.clientid);
+    }
+    if (body) {
+      headers.set('Content-Type', 'application/json');
+    }
+    const response = await fetch(url, {
+      method: body ? 'POST' : 'GET',
+      body: body ? JSON.stringify(body) : undefined,
+      headers,
+      credentials: 'omit',
+      cache: 'no-store',
+      redirect: 'error',
+      signal: AbortSignal.timeout(15000)
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok || Number(payload?.code) !== 200) {
+      const status = response.ok ? Number(payload?.code) : response.status;
+      throw new RequestError(payload?.msg || (status ? `请求失败（${status}）` : '响应格式不正确'), status);
+    }
+    return payload.data;
+  }
+
+  function requireAuthorization(error) {
+    if (error.status === 401 || error.status === 403) {
+      credentials = undefined;
+      auth.hidden = false;
+    }
+  }
+
+  function rowKey(row) {
+    return JSON.stringify([row.service, row.instanceId, row.version]);
+  }
+
+  function rowState(row) {
+    return row.error || !stateLabels.has(row.status?.state)
+      ? 'UNAVAILABLE' : row.status.state;
+  }
+
+  function allowedActions(row) {
+    if (!row.instanceId) return [];
+    switch (rowState(row)) {
+      case 'RUNNING': return ['PAUSE'];
+      case 'PAUSED': return ['RESUME'];
+      case 'PARTIAL': return ['PAUSE', 'RESUME'];
+      default: return [];
+    }
+  }
+
+  function displayAddress(row) {
+    return `${row.ip?.includes(':') ? `[${row.ip}]` : (row.ip || '—')}:${row.port ?? '—'}`;
+  }
+
+  function displayTarget(row) {
+    return `${row.service} · ${displayAddress(row)} · 版本 ${row.version ?? '未登记'} · ID ${row.instanceId}`;
+  }
+
+  function visibleRows() {
+    const service = byId('service-filter').value;
+    const version = byId('version-filter').value;
+    const state = byId('state-filter').value;
+    return (snapshot?.instances ?? []).filter((row) => (
+      (!service || row.service === service) && (!version || row.version === version) && (!state || rowState(row) === state)
+    ));
+  }
+
+  function renderVersions() {
+    const filter = byId('version-filter');
+    const selected = filter.value;
+    const versions = [...new Set([selected, ...snapshot.instances.map((row) => row.version)].filter(Boolean))];
+    versions.sort((left, right) => right.localeCompare(left, undefined, { numeric: true }));
+    filter.replaceChildren(new Option('全部版本', ''), ...versions.map((version) => new Option(version, version)));
+    filter.value = selected;
+  }
+
+  function isLocked() {
+    return loading || stale || operating || dialog.open;
+  }
+
+  function updateSelection() {
+    const visible = visibleRows();
+    const selectable = visible.filter((row) => allowedActions(row).length);
+    const chosen = selectable.filter((row) => selection.has(rowKey(row)));
+    const selectAll = byId('select-all');
+    selectAll.disabled = isLocked() || !selectable.length;
+    selectAll.checked = selectable.length > 0 && chosen.length === selectable.length;
+    selectAll.indeterminate = chosen.length > 0 && chosen.length < selectable.length;
+    byId('selection').textContent = `已选 ${chosen.length} 个 · 当前显示 ${visible.length} / ${snapshot?.instances.length ?? 0}`;
+    byId('batch-pause').disabled = isLocked() || !chosen.length || !chosen.every((row) => allowedActions(row).includes('PAUSE'));
+    byId('batch-resume').disabled = isLocked() || !chosen.length || !chosen.every((row) => allowedActions(row).includes('RESUME'));
+  }
+
+  function pill(label, style) {
+    const element = document.createElement('span');
+    element.className = `pill ${style}`;
+    element.textContent = label;
+    return element;
+  }
+
+  function renderRows() {
+    const container = byId('rows');
+    const focused = container.contains(document.activeElement) ? document.activeElement.dataset.target : undefined;
+    const rows = visibleRows();
+    const selectable = new Set(rows.filter((row) => allowedActions(row).length).map(rowKey));
+    for (const key of selection) {
+      if (!selectable.has(key)) selection.delete(key);
+    }
+    container.replaceChildren();
+    for (const row of rows) {
+      const key = rowKey(row);
+      const actions = allowedActions(row);
+      const tableRow = container.insertRow();
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.dataset.target = JSON.stringify([key, 'select']);
+      checkbox.setAttribute('aria-label', `选择 ${row.service} ${displayAddress(row)}`);
+      checkbox.disabled = isLocked() || !selectable.has(key);
+      checkbox.checked = selection.has(key);
+      checkbox.addEventListener('change', () => {
+        if (checkbox.checked) selection.add(key);
+        else selection.delete(key);
+        updateSelection();
+      });
+      tableRow.insertCell().append(checkbox);
+      tableRow.insertCell().textContent = row.service;
+      const address = tableRow.insertCell();
+      address.className = 'address';
+      address.textContent = displayAddress(row);
+      tableRow.insertCell().textContent = row.cluster || '—';
+      const version = document.createElement('span');
+      version.className = row.version ? 'version' : '';
+      version.textContent = row.version || '—';
+      tableRow.insertCell().append(version);
+      tableRow.insertCell().append(row.healthy ? pill('健康', 'ok') : pill('不健康', 'bad'));
+      tableRow.insertCell().append(row.enabled ? pill('上线', 'ok') : pill('下线', 'neutral'));
+      const status = tableRow.insertCell();
+      status.append(pill(...stateLabels.get(rowState(row))));
+      const detail = row.error || row.status?.error;
+      if (detail) {
+        const description = document.createElement('span');
+        description.className = 'cell-detail';
+        description.textContent = detail;
+        status.append(description);
+      }
+      tableRow.insertCell().textContent = row.status?.activeCount ?? '—';
+      const controls = document.createElement('div');
+      controls.className = 'actions';
+      for (const action of actions) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.dataset.target = JSON.stringify([key, action]);
+        button.setAttribute('aria-label', `${actionLabel(action)} ${row.service} ${displayAddress(row)}`);
+        button.className = action === 'PAUSE' ? 'pause' : 'resume';
+        button.textContent = actionLabel(action);
+        button.disabled = isLocked();
+        button.addEventListener('click', () => confirmAction(action, [row]));
+        controls.append(button);
+      }
+      tableRow.insertCell().append(controls.childElementCount ? controls : '—');
+    }
+    const empty = byId('empty');
+    empty.hidden = rows.length > 0;
+    empty.textContent = snapshot
+      ? '当前没有匹配的实例'
+      : loading ? '正在加载实例…' : '暂无实例信息';
+    byId('refresh').disabled = loading || operating;
+    updateSelection();
+    if (focused) {
+      const target = Array.from(container.querySelectorAll('[data-target]')).find((element) => element.dataset.target === focused);
+      if (target && !target.disabled) target.focus({ preventScroll: true });
+    }
+  }
+
+  function renderDiscovery() {
+    const discovery = byId('discovery');
+    const errors = snapshot.errors ?? [];
+    discovery.hidden = !errors.length;
+    discovery.querySelector('ul').replaceChildren(...errors.map(({ service, message }) => {
+      const item = document.createElement('li');
+      item.textContent = `${service} · ${message}`;
+      return item;
+    }));
+  }
+
+  function schedulePoll() {
+    clearTimeout(poll);
+    if (stale || operating || dialog.open) return;
+    if (snapshot?.instances.some((row) => ['STARTING', 'DRAINING'].includes(row.status?.state))) {
+      poll = setTimeout(() => refresh(true), 3000);
+    }
+  }
+
+  async function refresh(automatic = false) {
+    if (loading || operating || dialog.open) return;
+    clearTimeout(poll);
+    loading = true;
+    if (!automatic) {
+      byId('notice').textContent = '正在刷新实例…';
+      renderRows();
+    }
+    try {
+      snapshot = await request('/mq-api/instances');
+      stale = false;
+      auth.hidden = true;
+      byId('namespace').textContent = snapshot.namespace || '—';
+      byId('group').textContent = snapshot.group || '—';
+      renderVersions();
+      renderDiscovery();
+      byId('notice').textContent = `更新于 ${new Date().toLocaleTimeString('zh-CN')}`;
+    } catch (error) {
+      stale = true;
+      requireAuthorization(error);
+      byId('notice').textContent = `刷新失败：${error.message}。请刷新重试。`;
+    } finally {
+      loading = false;
+      renderRows();
+      schedulePoll();
+    }
+  }
+
+  function actionLabel(action) {
+    return action === 'PAUSE' ? '暂停消费' : '恢复消费';
+  }
+
+  function confirmAction(action, targets) {
+    if (isLocked() || !targets.length || !targets.every((row) => allowedActions(row).includes(action))) return;
+    clearTimeout(poll);
+    confirmation = { action, targets };
+    byId('confirm-title').textContent = `确认${actionLabel(action)}`;
+    byId('confirm-scope').textContent = `命名空间 ${snapshot.namespace || '—'} · 分组 ${snapshot.group || '—'} · ${targets.length} 个实例`;
+    byId('confirm-targets').replaceChildren(...targets.map((row) => {
+      const item = document.createElement('li');
+      item.textContent = displayTarget(row);
+      return item;
+    }));
+    const button = byId('confirm-action');
+    button.className = action === 'PAUSE' ? 'pause' : 'resume';
+    button.textContent = actionLabel(action);
+    dialog.returnValue = '';
+    dialog.showModal();
+  }
+
+  async function runAction(action, targets) {
+    const { namespace, group } = snapshot;
+    operating = true;
+    renderRows();
+    const results = byId('results');
+    const list = results.querySelector('ul');
+    list.replaceChildren();
+    results.hidden = false;
+    for (const row of targets) {
+      const item = document.createElement('li');
+      const target = displayTarget(row);
+      item.textContent = `${target} · 正在提交`;
+      list.append(item);
+      if (!auth.hidden) {
+        item.className = 'error-text';
+        item.textContent = `${target} · 未提交，授权已失效`;
+        continue;
+      }
+      try {
+        const { service, instanceId, version } = row;
+        const status = await request('/mq-api/instances/action', { namespace, group, service, instanceId, version: version ?? null, action });
+        const [label] = stateLabels.get(status?.state) ?? ['已受理'];
+        item.textContent = `${target} · ${label}${status?.error ? ` · ${status.error}` : ''}`;
+        if (status?.error) item.className = 'error-text';
+      } catch (error) {
+        requireAuthorization(error);
+        item.className = 'error-text';
+        item.textContent = `${target} · 请求失败：${error.message}`;
+      }
+    }
+    selection.clear();
+    operating = false;
+    if (auth.hidden) {
+      await refresh();
+    } else {
+      stale = true;
+      byId('notice').textContent = '授权已失效，请重新验证后刷新实例。';
+      renderRows();
+    }
+  }
+
+  for (const id of ['service-filter', 'version-filter', 'state-filter']) byId(id).addEventListener('change', renderRows);
+  byId('refresh').addEventListener('click', () => refresh());
+  byId('select-all').addEventListener('change', (event) => {
+    for (const row of visibleRows()) {
+      if (!allowedActions(row).length) continue;
+      if (event.target.checked) selection.add(rowKey(row));
+      else selection.delete(rowKey(row));
+    }
+    renderRows();
+  });
+  byId('batch-pause').addEventListener('click', () => confirmAction('PAUSE', visibleRows().filter((row) => selection.has(rowKey(row)))));
+  byId('batch-resume').addEventListener('click', () => confirmAction('RESUME', visibleRows().filter((row) => selection.has(rowKey(row)))));
+  dialog.addEventListener('close', () => {
+    if (dialog.returnValue === 'apply' && confirmation) {
+      const { action, targets } = confirmation;
+      confirmation = undefined;
+      runAction(action, targets);
+    } else {
+      confirmation = undefined;
+      schedulePoll();
+    }
+  });
+  byId('auth-form').addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (loading || operating) return;
+    const token = byId('token').value.trim();
+    const clientid = byId('clientid').value.trim();
+    if (!token || !clientid) return;
+    credentials = { token: /^Bearer\s/i.test(token) ? token : `Bearer ${token}`, clientid };
+    byId('token').value = '';
+    refresh();
+  });
+
+  refresh();
+</script>
+</body>
+</html>

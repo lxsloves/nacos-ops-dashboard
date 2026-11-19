@@ -223,6 +223,24 @@
       background: #fff;
     }
 
+    .page-link {
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--primary);
+      background: #fff;
+      font-weight: 650;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .page-link:hover, .page-link:focus-visible {
+      border-color: var(--primary);
+    }
+
     .summary-grid {
       display: grid;
       grid-template-columns: repeat(5, minmax(120px, 1fr));
@@ -630,6 +648,7 @@
       <input type="text" id="nacosUrlInput" placeholder="http://127.0.0.1:8848/nacos/" autocomplete="off">
       <div class="modal-error" id="urlModalError" hidden></div>
       <div class="modal-actions">
+        <a class="page-link" href="/dashboard/mq.html">MQ 消费管理</a>
         <button class="plain" id="urlModalDefault" type="button">使用默认值</button>
         <button class="primary" id="urlModalSubmit" type="button">应用</button>
       </div>
@@ -1015,7 +1034,7 @@
         ${state.loading ? `<div class="loading-overlay">正在处理,请稍候…</div>` : ""}
         <div class="table-header">
           <h2 class="section-title">实例列表</h2>
-
+          <a class="page-link" href="/dashboard/mq.html">MQ 消费管理</a>
         </div>
         <div class="batch-bar">
           <span>已选 ${selectedCount} 个实例 · 当前显示 ${rows.length} / ${state.instances.length}</span>
