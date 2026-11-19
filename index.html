@@ -88,6 +88,7 @@
 
     .table-panel {
       position: relative;
+      flex: 1;
     }
 
     .workspace-layout {
@@ -109,7 +110,8 @@
     .list-panel {
       min-width: 0;
       min-height: 0;
-      display: grid;
+      display: flex;
+      flex-direction: column;
     }
 
     .side-panel .toolbar {
@@ -221,24 +223,6 @@
 
     button.plain {
       background: #fff;
-    }
-
-    .page-link {
-      display: inline-flex;
-      align-items: center;
-      min-height: 34px;
-      padding: 0 10px;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      color: var(--primary);
-      background: #fff;
-      font-weight: 650;
-      text-decoration: none;
-      white-space: nowrap;
-    }
-
-    .page-link:hover, .page-link:focus-visible {
-      border-color: var(--primary);
     }
 
     .summary-grid {
@@ -472,6 +456,10 @@
       min-height: 46px;
     }
 
+    .diagnostics .section-title {
+      margin-bottom: 8px;
+    }
+
     .diagnostics-list {
       margin: 0;
       padding-left: 18px;
@@ -635,6 +623,20 @@
         max-height: none;
       }
     }
+    #mq-notice { margin: 0 0 6px; color: var(--muted); overflow-wrap: anywhere; }
+    #mq-notice:empty { display: none; }
+    #confirm .actions { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; }
+    #results { margin-bottom: 8px; border-bottom: 1px solid var(--line-soft); }
+    #results ul, #confirm ul { margin: 6px 0; padding-left: 22px; overflow-wrap: anywhere; }
+    #results .error-text { color: var(--bad); }
+    #confirm { width: min(620px, calc(100% - 24px)); border: 1px solid var(--line); border-radius: 8px; }
+    #confirm::backdrop { background: #18243570; }
+    #confirm ul { max-height: 45vh; overflow: auto; }
+    #confirm .actions { justify-content: flex-end; }
+    .mq-status { min-width: 100px; }
+    .mq-status small { display: block; margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
+    .batch-actions, .row-actions { flex-wrap: wrap; }
+
   </style>
 </head>
 <body>
@@ -648,7 +650,6 @@
       <input type="text" id="nacosUrlInput" placeholder="http://127.0.0.1:8848/nacos/" autocomplete="off">
       <div class="modal-error" id="urlModalError" hidden></div>
       <div class="modal-actions">
-        <a class="page-link" href="/dashboard/mq.html">MQ 消费管理</a>
         <button class="plain" id="urlModalDefault" type="button">使用默认值</button>
         <button class="primary" id="urlModalSubmit" type="button">应用</button>
       </div>
@@ -661,7 +662,12 @@
         <section class="toolbar" aria-label="Nacos 连接信息"></section>
         <section class="summary-grid" aria-label="实例状态概览"></section>
         <section class="filter-panel" aria-label="实例筛选"></section>
-        <section class="diagnostics" aria-label="诊断信息"></section>
+        <section class="diagnostics" aria-labelledby="diagnostics-title">
+          <h2 class="section-title" id="diagnostics-title">诊断信息</h2>
+          <div id="results" role="status" hidden><strong>MQ 操作结果</strong><ul></ul></div>
+          <p id="mq-notice" role="status"></p>
+          <ul class="diagnostics-list"></ul>
+        </section>
       </aside>
       <section class="list-panel" aria-label="实例列表区域">
         <section class="table-panel" aria-label="实例列表"></section>
@@ -669,6 +675,18 @@
     </div>
   </main>
 
+<dialog id="confirm" aria-labelledby="confirm-title" aria-describedby="confirm-scope">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-scope"></p>
+    <ul id="confirm-targets"></ul>
+    <div class="actions">
+      <button value="cancel" autofocus>取消</button>
+      <button id="confirm-action" value="apply"></button>
+    </div>
+  </form>
+</dialog>
+  <script src="/dashboard/mq.js"></script>
   <script>
     const NACOS_PROXY_BASE_URL = "/nacos";
 
@@ -680,6 +698,7 @@
       password: "",
       accessToken: sessionStorage.getItem("nacosDashboard.accessToken") || "",
       connected: false,
+      connectionRevision: 0,
       loading: false,
       namespaceOptions: [
         { id: "public", name: "public" },
@@ -687,13 +706,16 @@
         { id: "test", name: "test" }
       ],
       instances: [],
+      instancesNamespace: null,
       selectedKeys: new Set(),
       filters: {
         serviceName: "",
         ip: "",
         groupName: "",
         healthy: "all",
-        enabled: "all"
+        enabled: "all",
+        mqState: "",
+        mqVersion: ""
       },
       diagnostics: []
     };
@@ -703,7 +725,7 @@
       summary: document.querySelector(".summary-grid"),
       filter: document.querySelector(".filter-panel"),
       table: document.querySelector(".table-panel"),
-      diagnostics: document.querySelector(".diagnostics")
+      diagnostics: document.querySelector(".diagnostics-list")
     };
 
     function escapeHtml(value) {
@@ -775,8 +797,6 @@
         const message = data.message || data.error || `接口请求失败：${path}，HTTP ${response.status}`;
         // Nacos token 过期(Nacos 默认 5 小时 TTL):清掉本地缓存 → 强制重登 → 重发一次
         if (!_retried && /token expired/i.test(message) && state.username && state.password) {
-          state.accessToken = "";
-          sessionStorage.removeItem("nacosDashboard.accessToken");
           await loginIfNeeded(true);
           return requestJson(path, params, options, true);
         }
@@ -866,6 +886,9 @@
           if (state.filters.groupName && item.groupName !== state.filters.groupName) return false;
           if (state.filters.healthy !== "all" && String(item.healthy) !== state.filters.healthy) return false;
           if (state.filters.enabled !== "all" && String(item.enabled) !== state.filters.enabled) return false;
+          const consumer = mq.match(item);
+          if (state.filters.mqState && (!consumer || mq.rowState(consumer) !== state.filters.mqState)) return false;
+          if (state.filters.mqVersion && consumer?.version !== state.filters.mqVersion) return false;
           return true;
         })
         .sort((a, b) => {
@@ -949,6 +972,8 @@
       const groupOptions = stats.groups
         .map((groupName) => `<option value="${escapeHtml(groupName)}" ${state.filters.groupName === groupName ? "selected" : ""}>${escapeHtml(groupName)}</option>`)
         .join("");
+      const { states, versions } = mq.filters();
+      const mqVersions = [...new Set([state.filters.mqVersion, ...versions].filter(Boolean))];
       selectors.filter.innerHTML = `
         <div class="filter-header">
           <h2 class="section-title">实例筛选</h2>
@@ -961,7 +986,7 @@
         <div class="filter-grid">
           <div class="field namespace-filter span-2">
             <label for="namespaceId">Namespace ID</label>
-            <select id="namespaceId" data-state="namespaceId">
+            <select id="namespaceId" data-state="namespaceId" ${state.loading ? "disabled" : ""}>
               ${namespaceOptions}
             </select>
           </div>
@@ -999,15 +1024,35 @@
               <option value="false" ${state.filters.enabled === "false" ? "selected" : ""}>下线</option>
             </select>
           </div>
+          <div class="field">
+            <label for="mqState">MQ 消费状态</label>
+            <select id="mqState" data-filter="mqState">
+              <option value="">全部</option>
+              ${states.map(([value, [label]]) => `<option value="${value}" ${state.filters.mqState === value ? "selected" : ""}>${label}</option>`).join("")}
+            </select>
+          </div>
+          <div class="field">
+            <label for="mqVersion">MQ 版本</label>
+            <select id="mqVersion" data-filter="mqVersion">
+              <option value="">全部</option>
+              ${mqVersions.map((value) => `<option value="${escapeHtml(value)}" ${state.filters.mqVersion === value ? "selected" : ""}>${escapeHtml(value)}</option>`).join("")}
+            </select>
+          </div>
         </div>
       `;
     }
 
     function renderTable() {
       const rows = getFilteredInstances();
+      const visibleKeys = new Set(rows.map((item) => item.key));
+      for (const key of state.selectedKeys) {
+        if (!visibleKeys.has(key)) state.selectedKeys.delete(key);
+      }
       const selectedCount = state.selectedKeys.size;
+      const mqTargets = rows.filter((item) => state.selectedKeys.has(item.key)).map(mq.match);
       const tableRows = rows.map((item) => {
         const metadata = JSON.stringify(item.metadata || {});
+        const consumer = mq.match(item);
         const rowClass = !item.healthy ? "is-risk" : (!item.enabled ? "is-offline" : "");
         return `
           <tr class="${rowClass}">
@@ -1020,11 +1065,13 @@
             <td><span class="status ${item.enabled ? "good" : "warn"}">${item.enabled ? "上线" : "下线"}</span></td>
             <td>${escapeHtml(item.weight)}</td>
             <td class="metadata" title="${escapeHtml(metadata)}">${renderMetadata(item.metadata)}</td>
+            <td class="mq-status">${mq.renderInfo(consumer)}</td>
             <td>
               <div class="row-actions">
                 ${item.enabled
                   ? `<button class="danger" data-action="single-disable" data-key="${escapeHtml(item.key)}" ${state.loading ? "disabled" : ""}>下线</button>`
                   : `<button class="success" data-action="single-enable" data-key="${escapeHtml(item.key)}" ${state.loading ? "disabled" : ""}>上线</button>`}
+                ${mq.renderActions(consumer, item.key)}
               </div>
             </td>
           </tr>
@@ -1034,13 +1081,15 @@
         ${state.loading ? `<div class="loading-overlay">正在处理,请稍候…</div>` : ""}
         <div class="table-header">
           <h2 class="section-title">实例列表</h2>
-          <a class="page-link" href="/dashboard/mq.html">MQ 消费管理</a>
+          <span class="usage-note">${escapeHtml(mq.statusText())}</span>
         </div>
         <div class="batch-bar">
           <span>已选 ${selectedCount} 个实例 · 当前显示 ${rows.length} / ${state.instances.length}</span>
           <div class="batch-actions">
             <button class="success" data-action="batch-enable" ${selectedCount === 0 || state.loading ? "disabled" : ""}>批量上线</button>
             <button class="danger" data-action="batch-disable" ${selectedCount === 0 || state.loading ? "disabled" : ""}>批量下线</button>
+            <button data-action="mq-batch-PAUSE" ${mq.canAct("PAUSE", mqTargets) ? "" : "disabled"}>批量暂停消费</button>
+            <button data-action="mq-batch-RESUME" ${mq.canAct("RESUME", mqTargets) ? "" : "disabled"}>批量恢复消费</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1056,11 +1105,12 @@
                 <th>上线</th>
                 <th>权重</th>
                 <th>附加信息</th>
+                <th>MQ 消费</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              ${tableRows || `<tr><td colspan="10"><div class="empty">暂无实例。请确认 nginx /nacos 代理可用并连接后拉取实时实例</div></td></tr>`}
+              ${tableRows || `<tr><td colspan="11"><div class="empty">暂无实例。请确认 nginx /nacos 代理可用并连接后拉取实时实例</div></td></tr>`}
             </tbody>
           </table>
         </div>
@@ -1071,12 +1121,7 @@
       const messages = state.diagnostics.length
         ? state.diagnostics
         : ["请确认 nginx /nacos 代理可用并连接"];
-      selectors.diagnostics.innerHTML = `
-        <h2 class="section-title">诊断信息</h2>
-        <ul class="diagnostics-list">
-          ${messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("")}
-        </ul>
-      `;
+      selectors.diagnostics.innerHTML = messages.map((message) => `<li>${escapeHtml(message)}</li>`).join("");
     }
 
     function render() {
@@ -1089,14 +1134,20 @@
 
     async function loginIfNeeded(force = false) {
       if (state.accessToken && !force) return;
+      if (force) {
+        state.accessToken = "";
+        sessionStorage.removeItem("nacosDashboard.accessToken");
+      }
       if (!state.username && state.password) {
         state.accessToken = state.password;
         sessionStorage.setItem("nacosDashboard.accessToken", state.accessToken);
         return;
       }
       if (!state.username || !state.password) return;
+      const connectionRevision = state.connectionRevision;
       const body = new URLSearchParams({ username: state.username, password: state.password });
       const data = await requestJson("/v1/auth/users/login", {}, { method: "POST", body });
+      if (connectionRevision !== state.connectionRevision) return;
       state.accessToken = data.accessToken || data.data?.accessToken || "";
       if (state.accessToken) {
         sessionStorage.setItem("nacosDashboard.accessToken", state.accessToken);
@@ -1158,6 +1209,7 @@
         const batches = services.map(loadInstancesForService);
         const results = await Promise.all(batches);
         state.instances = results.flat();
+        state.instancesNamespace = state.namespaceId || "public";
         state.connected = true;
         pushDiagnostic(`已刷新 ${services.length} 个服务、${state.instances.length} 个实例`);
       } catch (error) {
@@ -1168,11 +1220,11 @@
       }
     }
 
-    async function connectAndLoad() {
+    async function connectAndLoad(forceLogin = false) {
       state.loading = true;
       render();
       try {
-        await loginIfNeeded();
+        await loginIfNeeded(forceLogin);
         try {
           const data = await requestJson("/v1/console/namespaces");
           const namespaces = Array.isArray(data.data) ? data.data : [];
@@ -1196,6 +1248,7 @@
         }
         const results = await Promise.all(batches);
         state.instances = results.flat();
+        state.instancesNamespace = state.namespaceId || "public";
         state.selectedKeys.clear();
         state.connected = true;
         pushDiagnostic(`连接成功，已加载 ${services.length} 个服务、${state.instances.length} 个实例`);
@@ -1205,6 +1258,16 @@
         state.loading = false;
         render();
       }
+      await mq.refresh();
+    }
+
+    function clearConnection() {
+      state.connectionRevision += 1;
+      state.connected = false;
+      state.instances = [];
+      state.instancesNamespace = null;
+      state.selectedKeys.clear();
+      mq.reset();
     }
 
     async function updateInstanceEnabled(instance, enabled) {
@@ -1268,7 +1331,7 @@
     async function reloadOnFilterChange(target) {
       updateStateFromInput(target);
       state.selectedKeys.clear();
-      await reloadInstances();
+      if (!state.loading) await reloadInstances();
     }
 
     document.addEventListener("input", (event) => {
@@ -1293,6 +1356,7 @@
       if (target.matches("[data-state]")) {
         updateStateFromInput(target);
         if (target.dataset.state === "namespaceId" && state.connected) {
+          clearConnection();
           await connectAndLoad();
         }
       }
@@ -1329,17 +1393,29 @@
           ip: "",
           groupName: "",
           healthy: "all",
-          enabled: "all"
+          enabled: "all",
+          mqState: "",
+          mqVersion: ""
         };
         state.selectedKeys.clear();
         render();
       }
       if (action === "connect") {
-        await connectAndLoad();
+        state.username = selectors.toolbar.querySelector('[data-state="username"]').value;
+        state.password = selectors.toolbar.querySelector('[data-state="password"]').value;
+        clearConnection();
+        await connectAndLoad(Boolean(state.password));
       }
       if (action === "refresh") {
         if (state.loading) return;
         await reloadInstances();
+        await mq.refresh();
+      }
+      if (action.startsWith("mq-")) {
+        const rows = getFilteredInstances().filter((item) =>
+          target.dataset.key ? item.key === target.dataset.key : state.selectedKeys.has(item.key)
+        );
+        mq.confirmAction(action.split("-").at(-1), rows.map(mq.match));
       }
       if (action === "batch-enable") {
         await runBatch(true);
@@ -1404,6 +1480,13 @@
           MODAL.submit.disabled = false;
           MODAL.defaultBtn.disabled = false;
           return false;
+        }
+        if (sessionStorage.getItem("nacosDashboard.tokenNacosUrl") !== url) {
+          clearConnection();
+          state.accessToken = "";
+          sessionStorage.removeItem("nacosDashboard.accessToken");
+          sessionStorage.setItem("nacosDashboard.tokenNacosUrl", url);
+          render();
         }
         localStorage.setItem("nacosDashboard.nacosUrl", url);
         MODAL.overlay.hidden = true;

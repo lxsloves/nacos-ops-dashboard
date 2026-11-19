@@ -1,6 +1,7 @@
 # 排除不需要进镜像的文件
 .git/
 .gitignore
+.env
 
 # 运行产物
 *.log

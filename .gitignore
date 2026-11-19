@@ -6,6 +6,7 @@
 # reload-server 运行产物
 .reload-server.log
 .reload-server.pid
+.env
 
 # 系统垃圾
 .DS_Store

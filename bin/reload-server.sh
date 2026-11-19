@@ -80,7 +80,7 @@ log_request() {
 }
 
 handle_request() {
-  local request_line method path line content_length body status resp_body url host lower proto clean_url
+  local request_line method path line content_length body status resp_body url host lower proto clean_url upstream_host
 
   if ! IFS= read -r request_line; then
     return 1
@@ -118,6 +118,9 @@ handle_request() {
     /api/nacos-url)
       if [[ "$method" == "GET" ]]; then
         url=$(get_nacos_url)
+        if [[ -n "${NACOS_FORWARD_FROM:-}" && -n "${NACOS_FORWARD_TO:-}" && "$url" == "http://$NACOS_FORWARD_TO/nacos/" ]]; then
+          url="http://$NACOS_FORWARD_FROM/nacos/"
+        fi
         resp_body="{\"url\":\"$url\"}"
       elif [[ "$method" == "POST" ]]; then
         url=$(printf '%s' "$body" | sed -nE 's|.*"url"[[:space:]]*:[[:space:]]*"([^"]+)".*|\1|p')
@@ -126,7 +129,12 @@ handle_request() {
           proto="http"
           [[ "$url" =~ ^https:// ]] && proto="https"
           clean_url="${proto}://${host}/nacos/"
-          if set_nacos_url "$host" && render_conf && reload_nginx; then
+          upstream_host="$host"
+          # Docker Desktop 的网段可能覆盖内网地址，指定的 HTTP 上游经宿主机转发。
+          if [[ "$proto" == "http" && "$host" == "${NACOS_FORWARD_FROM:-}" && -n "${NACOS_FORWARD_TO:-}" ]]; then
+            upstream_host="$NACOS_FORWARD_TO"
+          fi
+          if set_nacos_url "$upstream_host" && render_conf && reload_nginx; then
             resp_body="{\"ok\":true,\"url\":\"$clean_url\",\"host\":\"$host\"}"
           else
             status=500

@@ -67,9 +67,9 @@ stop.bat
 
 ## MQ 消费管理
 
-从 Dashboard 的「MQ 消费管理」打开 `/dashboard/mq.html`。页面列出 AI 异步轮询、画布重拍拼接、积分及返佣/存储扩容三个消费者服务的 HTTP 实例，可按服务、版本、消费状态筛选。暂停后等到该行显示「已暂停」，再进行实例下线或发布。
+在 Dashboard 的实例列表查看 MQ 消费状态，可按服务、MQ 版本和消费状态筛选。MQ 数据按命名空间、分组、服务、集群及 IP 和端口匹配到 Nacos 实例行，覆盖 AI 异步轮询、画布重拍拼接、积分及返佣/存储扩容。暂停后等到该行显示「已暂停」，再进行实例下线或发布。
 
-将 `nginx-local.conf` 的 `/mq-api/` 代理指向可达的目标环境 Gateway，保留上游路径 `/ops/mq/`。默认目标为本机 `127.0.0.1:10403`；用 Docker 时应填容器可访问的地址。本页显示 Gateway 返回的 Namespace，操作前核对环境。使用目标环境的超级管理员 Authorization Token 和 clientid 加载实例，凭据仅保留在页面内存。
+Docker 看板默认绑定本机 `127.0.0.1:18080`。将 `nginx-local.conf` 中的 `/mq-api/` 指向目标 Gateway 的 `/ops/mq/`，默认上游为本机 `127.0.0.1:10403`。在 Docker 中，请配置容器可达的 Gateway 地址。MQ 请求无需填写后台登录令牌，Nacos 登录继续用于加载实例列表和管理实例上下线。Gateway 与 Nacos 应指向同一环境，操作前核对看板显示的命名空间。
 
 Gateway 与三个消费者部署支持 MQ 运维接口的版本，并使用同一环境的 `MQ_OPS_TOKEN`（或 `mq-ops.internal-token`）。该内部凭据仅配置在服务端。修改 Dashboard 代理后，用现有启动方式重新加载配置。
 
