@@ -878,11 +878,10 @@
     }
 
     function getFilteredInstances() {
-      const ipKeyword = state.filters.ip.trim();
       return state.instances
         .filter((item) => {
           if (state.filters.serviceName && item.serviceName !== state.filters.serviceName) return false;
-          if (ipKeyword && !String(item.ip).includes(ipKeyword)) return false;
+          if (state.filters.ip && String(item.ip) !== state.filters.ip) return false;
           if (state.filters.groupName && item.groupName !== state.filters.groupName) return false;
           if (state.filters.healthy !== "all" && String(item.healthy) !== state.filters.healthy) return false;
           if (state.filters.enabled !== "all" && String(item.enabled) !== state.filters.enabled) return false;
@@ -969,6 +968,10 @@
       const serviceOptions = getServiceOptions()
         .map((serviceName) => `<option value="${escapeHtml(serviceName)}" ${state.filters.serviceName === serviceName ? "selected" : ""}>${escapeHtml(serviceName)}</option>`)
         .join("");
+      const ipOptions = [...new Set([state.filters.ip, ...state.instances.map((item) => String(item.ip))].filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .map((ip) => `<option value="${escapeHtml(ip)}" ${state.filters.ip === ip ? "selected" : ""}>${escapeHtml(ip)}</option>`)
+        .join("");
       const groupOptions = stats.groups
         .map((groupName) => `<option value="${escapeHtml(groupName)}" ${state.filters.groupName === groupName ? "selected" : ""}>${escapeHtml(groupName)}</option>`)
         .join("");
@@ -999,7 +1002,10 @@
           </div>
           <div class="field span-2">
             <label for="ip">IP</label>
-            <input id="ip" data-filter="ip" value="${escapeHtml(state.filters.ip)}" placeholder="按 IP 筛选">
+            <select id="ip" data-filter="ip">
+              <option value="">全部 IP</option>
+              ${ipOptions}
+            </select>
           </div>
           <div class="field span-2">
             <label for="groupName">分组</label>
