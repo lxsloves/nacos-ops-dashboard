@@ -707,6 +707,7 @@
       ],
       instances: [],
       instancesNamespace: null,
+      instancesNacosUpstream: null,
       selectedKeys: new Set(),
       filters: {
         serviceName: "",
@@ -781,8 +782,15 @@
       return url;
     }
 
-    async function requestJson(path, params = {}, options = {}, _retried = false) {
+    async function requestJson(path, params = {}, { nacosScope, retried = false, ...options } = {}) {
       const response = await fetch(buildUrl(path, params), options);
+      if (nacosScope) {
+        const upstream = response.headers.get("X-Nacos-Upstream");
+        if (nacosScope.upstream !== undefined && nacosScope.upstream !== upstream) {
+          throw new Error("Nacos 地址已切换，请刷新实例列表");
+        }
+        nacosScope.upstream = upstream;
+      }
       const text = await response.text();
       let data;
       try {
@@ -796,9 +804,9 @@
       if (!response.ok || data.code >= 400) {
         const message = data.message || data.error || `接口请求失败：${path}，HTTP ${response.status}`;
         // Nacos token 过期(Nacos 默认 5 小时 TTL):清掉本地缓存 → 强制重登 → 重发一次
-        if (!_retried && /token expired/i.test(message) && state.username && state.password) {
+        if (!retried && /token expired/i.test(message) && state.username && state.password) {
           await loginIfNeeded(true);
-          return requestJson(path, params, options, true);
+          return requestJson(path, params, { ...options, nacosScope, retried: true });
         }
         throw new Error(message);
       }
@@ -1160,7 +1168,7 @@
       }
     }
 
-    async function loadServices() {
+    async function loadServices(nacosScope) {
       const services = [];
       let pageNo = 1;
       let count = 0;
@@ -1172,8 +1180,8 @@
           pageSize: 500,
           serviceNameParam: "",
           groupNameParam: "",
-          namespaceId: state.namespaceId
-        });
+          namespaceId: nacosScope.namespace
+        }, { nacosScope });
         const pageServices = getCatalogServices(data);
         count = getCatalogCount(data, pageServices.length);
         services.push(...pageServices.map(normalizeServiceIdentity).filter(Boolean));
@@ -1182,7 +1190,7 @@
       return services;
     }
 
-    async function loadInstancesForService(rawServiceName) {
+    async function loadInstancesForService(rawServiceName, nacosScope) {
       const { groupName, serviceName } = splitServiceName(rawServiceName);
       const instances = [];
       let pageNo = 1;
@@ -1194,14 +1202,25 @@
           groupName,
           pageSize: 500,
           pageNo,
-          namespaceId: state.namespaceId
-        });
+          namespaceId: nacosScope.namespace
+        }, { nacosScope });
         const pageInstances = getCatalogInstances(data);
         count = getCatalogCount(data, pageInstances.length);
         instances.push(...pageInstances.map((host) => normalizeInstance(serviceName, host, groupName)));
         pageNo += 1;
       } while (instances.length < count && pageNo < 50);
       return instances;
+    }
+
+    async function loadNamespaceInstances() {
+      const nacosScope = { namespace: state.namespaceId };
+      const services = await loadServices(nacosScope);
+      const batches = await Promise.all(services.map((service) => loadInstancesForService(service, nacosScope)));
+      state.instances = batches.flat();
+      state.instancesNamespace = nacosScope.namespace || "public";
+      state.instancesNacosUpstream = nacosScope.upstream;
+      state.connected = true;
+      return services.length;
     }
 
     // 仅重查当前 namespace 下的 services + instances,不重置 filters / namespaces
@@ -1211,14 +1230,10 @@
       render();
       try {
         await loginIfNeeded();
-        const services = await loadServices();
-        const batches = services.map(loadInstancesForService);
-        const results = await Promise.all(batches);
-        state.instances = results.flat();
-        state.instancesNamespace = state.namespaceId || "public";
-        state.connected = true;
-        pushDiagnostic(`已刷新 ${services.length} 个服务、${state.instances.length} 个实例`);
+        const count = await loadNamespaceInstances();
+        pushDiagnostic(`已刷新 ${count} 个服务、${state.instances.length} 个实例`);
       } catch (error) {
+        state.instancesNacosUpstream = null;
         pushDiagnostic(explainError(error));
       } finally {
         state.loading = false;
@@ -1247,17 +1262,9 @@
         } catch (error) {
           pushDiagnostic(`命名空间列表加载失败，继续使用当前 Namespace：${explainError(error)}`);
         }
-        const services = await loadServices();
-        const batches = [];
-        for (const serviceName of services) {
-          batches.push(loadInstancesForService(serviceName));
-        }
-        const results = await Promise.all(batches);
-        state.instances = results.flat();
-        state.instancesNamespace = state.namespaceId || "public";
+        const count = await loadNamespaceInstances();
         state.selectedKeys.clear();
-        state.connected = true;
-        pushDiagnostic(`连接成功，已加载 ${services.length} 个服务、${state.instances.length} 个实例`);
+        pushDiagnostic(`连接成功，已加载 ${count} 个服务、${state.instances.length} 个实例`);
       } catch (error) {
         pushDiagnostic(explainError(error));
       } finally {
@@ -1272,6 +1279,7 @@
       state.connected = false;
       state.instances = [];
       state.instancesNamespace = null;
+      state.instancesNacosUpstream = null;
       state.selectedKeys.clear();
       mq.reset();
     }

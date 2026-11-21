@@ -60,7 +60,7 @@ const mq = (() => {
   }
 
   function allowedActions(row) {
-    if (!row?.instanceId) return [];
+    if (snapshot?.readOnly || !row?.instanceId) return [];
     switch (rowState(row)) {
       case 'RUNNING': return ['PAUSE'];
       case 'PAUSED': return ['RESUME'];
@@ -84,7 +84,11 @@ const mq = (() => {
   function scopeMatches() {
     const namespace = state.namespaceId || 'public';
     return Boolean(state.connected && snapshot && state.instancesNamespace === namespace &&
-      (snapshot.namespace || 'public') === namespace);
+      snapshot.upstream === state.instancesNacosUpstream && (snapshot.namespace || 'public') === namespace);
+  }
+
+  function gatewayRoute(upstream, namespace) {
+    return `/mq-api/${encodeURIComponent(upstream)}/${encodeURIComponent(namespace)}`;
   }
 
   function match(instance) {
@@ -126,9 +130,8 @@ const mq = (() => {
   }
 
   function statusText() {
-    if (!snapshot || stale) return '';
-    if (!scopeMatches()) return `MQ 命名空间：${snapshot.namespace || 'public'}。连接对应的 Nacos 命名空间后显示消费状态。`;
-    return `MQ 命名空间：${snapshot.namespace || 'public'} · 分组：${snapshot.group}`;
+    if (stale || !scopeMatches()) return '';
+    return `MQ 命名空间：${snapshot.namespace || 'public'} · 分组：${snapshot.group}${snapshot.readOnly ? ' · 只读' : ''}`;
   }
 
   function schedulePoll() {
@@ -143,13 +146,18 @@ const mq = (() => {
     if (!state.connected || loading || operating || dialog.open) return;
     clearTimeout(poll);
     const connectionRevision = state.connectionRevision;
+    const { instancesNamespace: namespace, instancesNacosUpstream: upstream } = state;
     loading = true;
     if (!automatic) message.textContent = '正在读取 MQ 状态…';
     renderTable();
     try {
-      const data = await request('/mq-api/instances');
+      if (!upstream) throw new Error('未取得当前实例使用的 Nacos 代理地址');
+      const data = await request(`${gatewayRoute(upstream, namespace)}/instances`);
       if (connectionRevision !== state.connectionRevision) return;
-      snapshot = data;
+      if ((data.namespace || 'public') !== namespace) {
+        throw new Error(`Gateway 返回的命名空间为 ${data.namespace || 'public'}，当前选择为 ${namespace}`);
+      }
+      snapshot = { ...data, namespace, upstream };
       instances = new Map();
       for (const row of snapshot.instances) {
         const key = instanceKey(snapshot.group, row.service, row.ip, row.port, row.cluster);
@@ -195,7 +203,8 @@ const mq = (() => {
   }
 
   async function runAction(action, targets) {
-    const { namespace, group } = snapshot;
+    const { namespace, group, upstream } = snapshot;
+    const route = gatewayRoute(upstream, namespace || 'public');
     const connectionRevision = state.connectionRevision;
     operating = true;
     renderTable();
@@ -208,7 +217,7 @@ const mq = (() => {
       resultList.append(item);
       try {
         const { service, instanceId, version } = row;
-        const status = await request('/mq-api/instances/action',
+        const status = await request(`${route}/instances/action`,
           { namespace, group, service, instanceId, version: version ?? null, action });
         if (connectionRevision !== state.connectionRevision) return;
         const [label] = stateLabels.get(status?.state) ?? ['已受理'];

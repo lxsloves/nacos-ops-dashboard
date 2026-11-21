@@ -81,6 +81,7 @@ log_request() {
 
 handle_request() {
   local request_line method path line content_length body status resp_body url host lower proto clean_url upstream_host
+  local nacos_url_pattern='^https?://(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9._-]+)(:[0-9]{1,5})?/nacos(/|$|[?#])'
 
   if ! IFS= read -r request_line; then
     return 1
@@ -124,8 +125,8 @@ handle_request() {
         resp_body="{\"url\":\"$url\"}"
       elif [[ "$method" == "POST" ]]; then
         url=$(printf '%s' "$body" | sed -nE 's|.*"url"[[:space:]]*:[[:space:]]*"([^"]+)".*|\1|p')
-        if [[ "$url" =~ ^https?://([^/]+)/nacos(/|$|[?#]) ]]; then
-          host="${BASH_REMATCH[1]}"
+        if [[ "$url" =~ $nacos_url_pattern ]]; then
+          host="${BASH_REMATCH[1]}${BASH_REMATCH[2]}"
           proto="http"
           [[ "$url" =~ ^https:// ]] && proto="https"
           clean_url="${proto}://${host}/nacos/"

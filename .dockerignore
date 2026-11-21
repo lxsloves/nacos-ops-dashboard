@@ -2,6 +2,7 @@
 .git/
 .gitignore
 .env
+.mq-routes/
 
 # 运行产物
 *.log

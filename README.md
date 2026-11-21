@@ -69,9 +69,23 @@ stop.bat
 
 在 Dashboard 的实例列表查看 MQ 消费状态，可按服务、MQ 版本和消费状态筛选。MQ 数据按命名空间、分组、服务、集群及 IP 和端口匹配到 Nacos 实例行，覆盖 AI 异步轮询、画布重拍拼接、积分及返佣/存储扩容。暂停后等到该行显示「已暂停」，再进行实例下线或发布。
 
-Docker 看板默认绑定本机 `127.0.0.1:18080`。将 `nginx-local.conf` 中的 `/mq-api/` 指向目标 Gateway 的 `/ops/mq/`，默认上游为本机 `127.0.0.1:10403`。在 Docker 中，请配置容器可达的 Gateway 地址。MQ 请求无需填写后台登录令牌，Nacos 登录继续用于加载实例列表和管理实例上下线。Gateway 与 Nacos 应指向同一环境，操作前核对看板显示的命名空间。
+看板按实例列表所用的 Nacos 上游地址和 Namespace 选择 MQ Gateway。每个要管理的环境在 `.mq-routes/` 放一个 Nginx 配置，路径为 `/mq-api/<Nacos 上游 host:port>/<Namespace>/`，转到该环境已开放 MQ 运维的 Gateway。Nacos 经宿主机转发时，以 Nacos 接口响应的 `X-Nacos-Upstream` 为准。当前环境未配路由时，诊断区会提示原因。
 
-Gateway 与三个消费者部署支持 MQ 运维接口的版本，并使用同一环境的 `MQ_OPS_TOKEN`（或 `mq-ops.internal-token`）。该内部凭据仅配置在服务端。修改 Dashboard 代理后，用现有启动方式重新加载配置。
+例如，将本机 Nacos 的 `tools-local` 命名空间接到本机 Gateway，可创建 `.mq-routes/local.conf`：
+
+```nginx
+location ^~ /mq-api/127.0.0.1:8848/tools-local/ {
+    proxy_pass http://127.0.0.1:10403/ops/mq/;
+    proxy_set_header Cookie "";
+    proxy_connect_timeout 3s;
+    proxy_read_timeout 30s;
+    proxy_next_upstream off;
+}
+```
+
+Docker 会只读挂载这个目录。Gateway 地址须从容器可达，例如通过宿主机已建立的私有转发。MQ 请求无需填写后台登录令牌，Nacos 登录继续用于加载实例列表和管理实例上下线。
+
+Gateway 通过内网直连三个消费者的 MQ 运维接口。先更新 Gateway，确认常规路由已隔离消费者内部接口，再更新消费者。修改 Dashboard 代理后，用现有启动方式重新加载配置。
 
 ## 升级 nginx
 
